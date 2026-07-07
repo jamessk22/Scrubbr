@@ -7,3 +7,4 @@ config.toml
 *.db-journal
 .pytest_cache/
 .DS_Store
+settings.local.json
