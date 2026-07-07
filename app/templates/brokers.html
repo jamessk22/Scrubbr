@@ -4,6 +4,16 @@
 <h1>Broker directory</h1>
 
 <form class="filters" method="get" action="/brokers">
+    {% if multi_profile %}
+    <label>Profile
+        <select name="profile_id" onchange="this.form.submit()">
+            <option value="all" {% if selected_profile == "all" %}selected{% endif %}>All profiles</option>
+            {% for p in profiles %}
+            <option value="{{ p.id }}" {% if selected_profile == p.id|string %}selected{% endif %}>{{ p.name }}</option>
+            {% endfor %}
+        </select>
+    </label>
+    {% endif %}
     <label>Category
         <select name="category" onchange="this.form.submit()">
             <option value="">All</option>
@@ -26,11 +36,12 @@
 <p class="muted">{{ rows|length }} broker(s)</p>
 
 <table>
-    <thead><tr><th>Broker</th><th>Category</th><th>Method</th><th>Difficulty</th><th>Status</th></tr></thead>
+    <thead><tr><th>Broker</th>{% if multi_profile %}<th>Profile</th>{% endif %}<th>Category</th><th>Method</th><th>Difficulty</th><th>Status</th></tr></thead>
     <tbody>
-    {% for broker, r in rows %}
+    {% for broker, profile, r in rows %}
         <tr>
-            <td><a href="/broker/{{ broker.id }}">{{ broker.name }}</a></td>
+            <td><a href="/broker/{{ broker.id }}?profile_id={{ profile.id }}">{{ broker.name }}</a></td>
+            {% if multi_profile %}<td class="muted">{{ profile.name }}</td>{% endif %}
             <td class="muted">{{ broker.category }}</td>
             <td class="muted">{{ broker.contact_method }}</td>
             <td class="muted">{{ "•" * broker.difficulty }}</td>

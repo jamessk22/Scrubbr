@@ -15,6 +15,20 @@ from .models import (
     Request,
 )
 
+_REQUESTS_TABLE = """
+CREATE TABLE IF NOT EXISTS requests (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    broker_id INTEGER NOT NULL REFERENCES brokers(id) ON DELETE CASCADE,
+    profile_id INTEGER NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    status TEXT NOT NULL DEFAULT 'not_started',
+    method TEXT DEFAULT 'email',
+    sent_at TEXT,
+    next_due TEXT,
+    notes TEXT DEFAULT '',
+    UNIQUE(broker_id, profile_id)
+);
+"""
+
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS brokers (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -29,8 +43,9 @@ CREATE TABLE IF NOT EXISTS brokers (
     notes TEXT DEFAULT ''
 );
 
-CREATE TABLE IF NOT EXISTS profile (
-    id INTEGER PRIMARY KEY CHECK (id = 1),
+CREATE TABLE IF NOT EXISTS profiles (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL DEFAULT 'Me',
     full_name TEXT DEFAULT '',
     aliases TEXT DEFAULT '',
     emails TEXT DEFAULT '',
@@ -40,16 +55,7 @@ CREATE TABLE IF NOT EXISTS profile (
     state TEXT DEFAULT ''
 );
 
-CREATE TABLE IF NOT EXISTS requests (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    broker_id INTEGER NOT NULL UNIQUE REFERENCES brokers(id) ON DELETE CASCADE,
-    status TEXT NOT NULL DEFAULT 'not_started',
-    method TEXT DEFAULT 'email',
-    sent_at TEXT,
-    next_due TEXT,
-    notes TEXT DEFAULT ''
-);
-
+""" + _REQUESTS_TABLE + """
 CREATE TABLE IF NOT EXISTS request_history (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     request_id INTEGER NOT NULL REFERENCES requests(id) ON DELETE CASCADE,
@@ -80,16 +86,46 @@ def connect(db_path: Path | str = DEFAULT_DB_PATH) -> sqlite3.Connection:
 
 def init_db(conn: sqlite3.Connection) -> None:
     conn.executescript(SCHEMA)
-    conn.execute("INSERT OR IGNORE INTO profile (id) VALUES (1)")
+    # Rebuilding requests_old below would otherwise cascade-delete request_history
+    # rows: SQLite auto-remaps request_history's FK to the renamed table, and
+    # DROP TABLE cascades ON DELETE actions when foreign_keys is enabled.
+    conn.execute("PRAGMA foreign_keys = OFF")
     _migrate(conn)
     conn.commit()
+    conn.execute("PRAGMA foreign_keys = ON")
 
 
 def _migrate(conn: sqlite3.Connection) -> None:
-    """Additive migrations for DBs created before a column existed."""
-    cols = {r["name"] for r in conn.execute("PRAGMA table_info(profile)")}
-    if "state" not in cols:
-        conn.execute("ALTER TABLE profile ADD COLUMN state TEXT DEFAULT ''")
+    """Rebuilds DBs created before multi-profile support existed.
+
+    Old schema: singleton `profile` table (id=1) and `requests` unique on
+    broker_id alone. Both get folded into the new `profiles`/`requests(broker_id,
+    profile_id)` shape, preserving row ids so request_history/seen_messages FKs
+    stay valid.
+    """
+    tables = {r["name"] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+    if "profile" in tables:
+        old = conn.execute("SELECT * FROM profile WHERE id = 1").fetchone()
+        if old is not None:
+            data = {k: old[k] for k in old.keys()}
+            data.setdefault("state", "")
+            conn.execute(
+                """INSERT OR IGNORE INTO profiles
+                     (id, name, full_name, aliases, emails, phones, addresses, date_of_birth, state)
+                   VALUES (1, 'Me', :full_name, :aliases, :emails, :phones, :addresses, :date_of_birth, :state)""",
+                data,
+            )
+        conn.execute("DROP TABLE profile")
+
+    req_cols = {r["name"] for r in conn.execute("PRAGMA table_info(requests)")}
+    if req_cols and "profile_id" not in req_cols:
+        conn.execute("ALTER TABLE requests RENAME TO requests_old")
+        conn.executescript(_REQUESTS_TABLE)
+        conn.execute(
+            """INSERT INTO requests (id, broker_id, profile_id, status, method, sent_at, next_due, notes)
+               SELECT id, broker_id, 1, status, method, sent_at, next_due, notes FROM requests_old"""
+        )
+        conn.execute("DROP TABLE requests_old")
 
 
 # --- Brokers ---------------------------------------------------------------
@@ -128,31 +164,59 @@ def get_broker(conn: sqlite3.Connection, broker_id: int) -> Broker | None:
     return _broker(row) if row else None
 
 
-# --- Profile ---------------------------------------------------------------
+# --- Profiles ----------------------------------------------------------------
 
-def get_profile(conn: sqlite3.Connection) -> Profile:
-    row = conn.execute("SELECT * FROM profile WHERE id = 1").fetchone()
+def _profile(row: sqlite3.Row) -> Profile:
     return Profile(**{k: row[k] for k in row.keys()})
 
 
-def save_profile(conn: sqlite3.Connection, data: dict) -> None:
-    conn.execute(
-        """UPDATE profile SET full_name=:full_name, aliases=:aliases,
-             emails=:emails, phones=:phones, addresses=:addresses,
-             date_of_birth=:date_of_birth, state=:state WHERE id = 1""",
+def all_profiles(conn: sqlite3.Connection) -> list[Profile]:
+    rows = conn.execute("SELECT * FROM profiles ORDER BY id").fetchall()
+    return [_profile(r) for r in rows]
+
+
+def get_profile(conn: sqlite3.Connection, profile_id: int) -> Profile | None:
+    row = conn.execute("SELECT * FROM profiles WHERE id = ?", (profile_id,)).fetchone()
+    return _profile(row) if row else None
+
+
+def create_profile(conn: sqlite3.Connection, data: dict) -> Profile:
+    cur = conn.execute(
+        """INSERT INTO profiles (name, full_name, aliases, emails, phones, addresses, date_of_birth, state)
+           VALUES (:name, :full_name, :aliases, :emails, :phones, :addresses, :date_of_birth, :state)""",
         data,
     )
+    conn.commit()
+    return get_profile(conn, cur.lastrowid)
+
+
+def save_profile(conn: sqlite3.Connection, profile_id: int, data: dict) -> None:
+    conn.execute(
+        """UPDATE profiles SET name=:name, full_name=:full_name, aliases=:aliases,
+             emails=:emails, phones=:phones, addresses=:addresses,
+             date_of_birth=:date_of_birth, state=:state WHERE id = :id""",
+        {**data, "id": profile_id},
+    )
+    conn.commit()
+
+
+def delete_profile(conn: sqlite3.Connection, profile_id: int) -> None:
+    conn.execute("DELETE FROM profiles WHERE id = ?", (profile_id,))
     conn.commit()
 
 
 # --- Requests --------------------------------------------------------------
 
-def get_or_create_request(conn: sqlite3.Connection, broker_id: int) -> Request:
-    row = conn.execute("SELECT * FROM requests WHERE broker_id = ?", (broker_id,)).fetchone()
+def get_or_create_request(conn: sqlite3.Connection, broker_id: int, profile_id: int) -> Request:
+    row = conn.execute(
+        "SELECT * FROM requests WHERE broker_id = ? AND profile_id = ?", (broker_id, profile_id)
+    ).fetchone()
     if row is None:
-        cur = conn.execute("INSERT INTO requests (broker_id) VALUES (?)", (broker_id,))
+        cur = conn.execute(
+            "INSERT INTO requests (broker_id, profile_id) VALUES (?, ?)", (broker_id, profile_id)
+        )
         conn.commit()
-        return Request(id=cur.lastrowid, broker_id=broker_id)
+        return Request(id=cur.lastrowid, broker_id=broker_id, profile_id=profile_id)
     return _request(conn, row)
 
 
@@ -162,7 +226,7 @@ def _request(conn: sqlite3.Connection, row: sqlite3.Row) -> Request:
         (row["id"],),
     ).fetchall()
     return Request(
-        id=row["id"], broker_id=row["broker_id"], status=row["status"],
+        id=row["id"], broker_id=row["broker_id"], profile_id=row["profile_id"], status=row["status"],
         method=row["method"], sent_at=row["sent_at"], next_due=row["next_due"],
         notes=row["notes"], history=[dict(h) for h in hist],
     )
@@ -173,11 +237,11 @@ def get_request(conn: sqlite3.Connection, request_id: int) -> Request | None:
     return _request(conn, row) if row else None
 
 
-def all_requests(conn: sqlite3.Connection) -> dict[int, Request]:
-    """Returns {broker_id: Request} for every broker (auto-created lazily)."""
+def all_requests(conn: sqlite3.Connection, profile_id: int) -> dict[int, Request]:
+    """Returns {broker_id: Request} for every broker, scoped to one profile (auto-created lazily)."""
     result: dict[int, Request] = {}
     for b in all_brokers(conn):
-        result[b.id] = get_or_create_request(conn, b.id)
+        result[b.id] = get_or_create_request(conn, b.id, profile_id)
     return result
 
 

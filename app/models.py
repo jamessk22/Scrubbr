@@ -42,7 +42,8 @@ class Broker:
 
 @dataclass
 class Profile:
-    id: int = 1
+    id: int = 0
+    name: str = "Me"  # short label distinguishing this profile from others, e.g. "Spouse"
     full_name: str = ""
     aliases: str = ""
     emails: str = ""
@@ -66,6 +67,7 @@ class Profile:
 class Request:
     id: int
     broker_id: int
+    profile_id: int
     status: str = STATUS_NOT_STARTED
     method: str = CONTACT_EMAIL
     sent_at: str | None = None

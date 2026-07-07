@@ -5,9 +5,23 @@
 
 {% if not profile_ready %}
 <div class="banner warn">
-    Your <a href="/profile">profile</a> is empty. Fill it in before sending requests &mdash;
-    the generated emails use it to identify your records.
+    One or more <a href="/profiles">profiles</a> are missing details. Fill them in before sending
+    requests &mdash; the generated emails use them to identify records.
 </div>
+{% endif %}
+
+{% if multi_profile %}
+<form class="filters" method="get" action="/">
+    <label>Profile
+        <select name="profile_id" onchange="this.form.submit()">
+            <option value="all" {% if selected_profile == "all" %}selected{% endif %}>All profiles</option>
+            {% for p in profiles %}
+            <option value="{{ p.id }}" {% if selected_profile == p.id|string %}selected{% endif %}>{{ p.name }}</option>
+            {% endfor %}
+        </select>
+    </label>
+    <noscript><button type="submit">Filter</button></noscript>
+</form>
 {% endif %}
 
 <section class="stats">
@@ -34,8 +48,9 @@
     <h2>Due for follow-up</h2>
     <p class="muted">Brokers re-list data. These are due for a fresh request.</p>
     <ul class="due">
-    {% for broker, r in due_brokers %}
-        <li><a href="/broker/{{ broker.id }}">{{ broker.name }}</a>
+    {% for broker, profile, r in due_brokers %}
+        <li><a href="/broker/{{ broker.id }}?profile_id={{ profile.id }}">{{ broker.name }}</a>
+            {% if multi_profile %}<span class="muted">({{ profile.name }})</span>{% endif %}
             <span class="muted">due {{ r.next_due }}</span></li>
     {% endfor %}
     </ul>
@@ -45,11 +60,12 @@
 <section>
     <h2>All brokers</h2>
     <table>
-        <thead><tr><th>Broker</th><th>Category</th><th>Status</th><th>Next due</th></tr></thead>
+        <thead><tr><th>Broker</th>{% if multi_profile %}<th>Profile</th>{% endif %}<th>Category</th><th>Status</th><th>Next due</th></tr></thead>
         <tbody>
-        {% for broker, r in rows %}
+        {% for broker, profile, r in rows %}
             <tr>
-                <td><a href="/broker/{{ broker.id }}">{{ broker.name }}</a></td>
+                <td><a href="/broker/{{ broker.id }}?profile_id={{ profile.id }}">{{ broker.name }}</a></td>
+                {% if multi_profile %}<td class="muted">{{ profile.name }}</td>{% endif %}
                 <td class="muted">{{ broker.category }}</td>
                 <td><span class="badge s-{{ r.status }}">{{ STATUS_LABELS[r.status] }}</span></td>
                 <td class="muted">{{ r.next_due or "&mdash;" | safe }}</td>

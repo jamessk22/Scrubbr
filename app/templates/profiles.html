@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}Profiles &middot; Personal Incogni{% endblock %}
+{% block body %}
+<h1>Profiles</h1>
+<p class="muted">Each profile is a separate person's identifying details. Removal requests can be
+generated for one profile, or all of them, from a broker's page.</p>
+
+{% if not profiles %}
+<div class="banner warn">No profiles yet &mdash; add one to start generating removal requests.</div>
+{% else %}
+<table>
+    <thead><tr><th>Label</th><th>Full name</th><th>State</th><th></th></tr></thead>
+    <tbody>
+    {% for p in profiles %}
+        <tr>
+            <td>{{ p.name }}</td>
+            <td class="muted">{{ p.full_name or "&mdash;" | safe }}</td>
+            <td class="muted">{{ p.state or "&mdash;" | safe }}</td>
+            <td>
+                <a href="/profiles/{{ p.id }}/edit">Edit</a>
+                <form method="post" action="/profiles/{{ p.id }}/delete" style="display:inline"
+                      onsubmit="return confirm('Delete {{ p.name }}? This also removes all of its tracked requests.')">
+                    <button type="submit" class="btn-link">Delete</button>
+                </form>
+            </td>
+        </tr>
+    {% endfor %}
+    </tbody>
+</table>
+{% endif %}
+
+<p><a class="btn" href="/profiles/new">Add profile</a></p>
+{% endblock %}

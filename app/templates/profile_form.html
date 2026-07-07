@@ -1,11 +1,15 @@
 {% extends "base.html" %}
-{% block title %}Profile &middot; Personal Incogni{% endblock %}
+{% block title %}{{ "Add profile" if is_new else "Edit profile" }} &middot; Personal Incogni{% endblock %}
 {% block body %}
-<h1>Your profile</h1>
+<p><a href="/profiles">&larr; All profiles</a></p>
+<h1>{{ "Add profile" if is_new else "Edit profile" }}</h1>
 <p class="muted">Stored locally in SQLite and only used to fill removal requests. The more
 identifiers you provide, the more listings brokers can match and remove.</p>
 
-<form method="post" action="/profile" class="profile">
+<form method="post" action="{{ '/profiles' if is_new else '/profiles/' + profile.id|string }}" class="profile">
+    <label>Label <span class="muted">(e.g. "Me", "Spouse")</span>
+        <input type="text" name="name" value="{{ profile.name }}" required>
+    </label>
     <label>Full name
         <input type="text" name="full_name" value="{{ profile.full_name }}" required>
     </label>
@@ -21,7 +25,7 @@ identifiers you provide, the more listings brokers can match and remove.</p>
     <label>Addresses <span class="muted">(one per line, current first)</span>
         <textarea name="addresses" rows="4">{{ profile.addresses }}</textarea>
     </label>
-    <label>State of residence <span class="muted">(determines which state privacy law your requests cite)</span>
+    <label>State of residence <span class="muted">(determines which state privacy law requests cite)</span>
         <input type="text" name="state" value="{{ profile.state }}" placeholder="e.g. Massachusetts">
     </label>
     <label>Date of birth

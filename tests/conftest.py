@@ -25,3 +25,14 @@ def profile():
         addresses="10 Beacon St, Boston MA 02108",
         date_of_birth="1990-01-15", state="Massachusetts",
     )
+
+
+@pytest.fixture
+def profile_id(conn):
+    p = db.create_profile(conn, {
+        "name": "Me", "full_name": "Jane Q. Public", "aliases": "Jane Public",
+        "emails": "jane@example.com, jq@example.com", "phones": "555-0100",
+        "addresses": "10 Beacon St, Boston MA 02108",
+        "date_of_birth": "1990-01-15", "state": "Massachusetts",
+    })
+    return p.id
