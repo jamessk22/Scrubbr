@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% block title %}{{ broker.name }} &middot; Personal Incogni{% endblock %}
+{% block body %}
+<p><a href="/brokers">&larr; All brokers</a></p>
+<h1>{{ broker.name }}</h1>
+<p class="badge s-{{ req.status }}">{{ STATUS_LABELS[req.status] }}</p>
+
+<section class="grid">
+    <div>
+        <h2>Broker info</h2>
+        <dl>
+            <dt>Category</dt><dd>{{ broker.category }}</dd>
+            <dt>Contact method</dt><dd>{{ broker.contact_method }}</dd>
+            <dt>Legal basis</dt><dd>{{ broker.jurisdiction }}</dd>
+            <dt>Difficulty</dt><dd>{{ "•" * broker.difficulty }} ({{ broker.difficulty }}/3)</dd>
+            {% if broker.website %}<dt>Website</dt><dd><a href="{{ broker.website }}" target="_blank" rel="noopener">{{ broker.website }}</a></dd>{% endif %}
+            {% if broker.opt_out_url %}<dt>Opt-out page</dt><dd><a href="{{ broker.opt_out_url }}" target="_blank" rel="noopener">{{ broker.opt_out_url }}</a></dd>{% endif %}
+            {% if broker.opt_out_email %}<dt>Opt-out email</dt><dd>{{ broker.opt_out_email }}</dd>{% endif %}
+            {% if broker.notes %}<dt>Notes</dt><dd>{{ broker.notes }}</dd>{% endif %}
+        </dl>
+    </div>
+
+    <div>
+        <h2>Update status</h2>
+        <form method="post" action="/broker/{{ broker.id }}/status" class="statusform">
+            <select name="status">
+                {% for key, label in statuses.items() %}
+                <option value="{{ key }}" {% if key == req.status %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+            </select>
+            <input type="text" name="note" placeholder="optional note">
+            <button type="submit">Save</button>
+        </form>
+        {% if req.sent_at %}<p class="muted">Last sent {{ req.sent_at }}{% if req.next_due %} &middot; next due {{ req.next_due }}{% endif %}</p>{% endif %}
+        {% if req.history %}
+        <h3>History</h3>
+        <ul class="history">
+            {% for h in req.history %}
+            <li><span class="badge s-{{ h.status }}">{{ STATUS_LABELS[h.status] }}</span>
+                <span class="muted">{{ h.at }}</span>{% if h.note %} &mdash; {{ h.note }}{% endif %}</li>
+            {% endfor %}
+        </ul>
+        {% endif %}
+    </div>
+</section>
+
+<section>
+    <h2>Removal request</h2>
+    {% if not profile_ready %}
+    <div class="banner warn">Fill in your <a href="/profile">profile</a> first &mdash; this request has no identifying details without it.</div>
+    {% endif %}
+
+    {% if is_form %}
+    <p>This broker uses a <strong>web form</strong>, not email. Steps:</p>
+    <ol class="steps">
+        <li>Open the <a href="{{ broker.opt_out_url }}" target="_blank" rel="noopener">opt-out page</a>.</li>
+        <li>Search for your listing and submit the removal request using your profile details below.</li>
+        <li>Complete any phone/email verification the broker requires.</li>
+        <li>Come back and mark this <strong>Sent</strong> (or <strong>Needs verification</strong>).</li>
+    </ol>
+    <details><summary>Your profile details to paste into the form</summary>
+        <pre class="request">{{ profile.full_name }}
+{% if profile.aliases %}AKA: {{ profile.aliases }}
+{% endif %}{% if profile.emails %}Email: {{ profile.emails }}
+{% endif %}{% if profile.phones %}Phone: {{ profile.phones }}
+{% endif %}{% if profile.addresses %}Address:
+{{ profile.addresses }}{% endif %}</pre>
+    </details>
+    {% else %}
+    <p>Send this email to <strong>{{ broker.opt_out_email or "the broker's privacy contact" }}</strong>.
+       The subject includes the tag <code>[{{ rendered.tag }}]</code> so inbox monitoring can match the reply &mdash; keep it intact.</p>
+    <div class="actions">
+        {% if mailto %}<a class="btn" href="{{ mailto }}">Open in mail client</a>{% endif %}
+        <button class="btn" type="button" onclick="copyRequest()">Copy email text</button>
+    </div>
+    <p class="field"><strong>Subject:</strong> <span id="subj">{{ rendered.subject }}</span></p>
+    <pre class="request" id="reqbody">{{ rendered.body }}</pre>
+    {% endif %}
+</section>
+
+<script>
+function copyRequest() {
+    const subj = document.getElementById('subj').innerText;
+    const body = document.getElementById('reqbody').innerText;
+    navigator.clipboard.writeText('Subject: ' + subj + '\n\n' + body);
+    event.target.textContent = 'Copied!';
+    setTimeout(() => { event.target.textContent = 'Copy email text'; }, 1500);
+}
+</script>
+{% endblock %}

@@ -1,0 +1,18 @@
+# Copy to config.toml and fill in. config.toml is gitignored.
+# The IMAP section powers reply monitoring. Use a dedicated mailbox or Gmail
+# label and an app-specific password, never your primary account password.
+
+[imap]
+enabled = false
+host = "imap.gmail.com"
+port = 993
+username = "you@example.com"
+password = "your-app-specific-password"
+# Only scan mail in this folder/label. Gmail: create a filter that labels
+# broker replies and point this at that label.
+folder = "INBOX"
+
+[app]
+# Subject-line token prefix used to correlate broker replies to requests,
+# e.g. a generated subject includes "[PIR-42]". Keep it short and unique.
+request_tag_prefix = "PIR"

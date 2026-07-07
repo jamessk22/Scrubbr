@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}Review queue &middot; Personal Incogni{% endblock %}
+{% block body %}
+<h1>Review queue</h1>
+<p class="muted">Replies the classifier couldn't confidently handle &mdash; either it
+couldn't tie them to a request, or the wording was ambiguous. Resolve each one manually.</p>
+
+{% if not items %}
+<p>Nothing to review.</p>
+{% else %}
+{% for m in items %}
+<div class="review-item">
+    <div class="review-head">
+        <strong>{{ m.subject or "(no subject)" }}</strong>
+        <span class="muted">from {{ m.from_addr }} &middot; {{ m.received_at }}</span>
+    </div>
+    <p class="muted">Classifier guess: <code>{{ m.classification }}</code>
+        {% if m.broker %}&middot; matched broker: {{ m.broker.name }}{% else %}&middot; no matched broker{% endif %}</p>
+    <form method="post" action="/review/{{ m.message_id }}/resolve" class="review-form">
+        <input type="number" name="broker_id" placeholder="broker id"
+               value="{{ m.broker.id if m.broker else '' }}" required>
+        <select name="status">
+            {% for key, label in statuses.items() %}
+            <option value="{{ key }}">{{ label }}</option>
+            {% endfor %}
+        </select>
+        <button type="submit">Apply</button>
+    </form>
+</div>
+{% endfor %}
+{% endif %}
+{% endblock %}

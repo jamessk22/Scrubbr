@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}Brokers &middot; Personal Incogni{% endblock %}
+{% block body %}
+<h1>Broker directory</h1>
+
+<form class="filters" method="get" action="/brokers">
+    <label>Category
+        <select name="category" onchange="this.form.submit()">
+            <option value="">All</option>
+            {% for c in categories %}
+            <option value="{{ c }}" {% if c == sel_category %}selected{% endif %}>{{ c }}</option>
+            {% endfor %}
+        </select>
+    </label>
+    <label>Status
+        <select name="status" onchange="this.form.submit()">
+            <option value="">All</option>
+            {% for key, label in statuses.items() %}
+            <option value="{{ key }}" {% if key == sel_status %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+        </select>
+    </label>
+    <noscript><button type="submit">Filter</button></noscript>
+</form>
+
+<p class="muted">{{ rows|length }} broker(s)</p>
+
+<table>
+    <thead><tr><th>Broker</th><th>Category</th><th>Method</th><th>Difficulty</th><th>Status</th></tr></thead>
+    <tbody>
+    {% for broker, r in rows %}
+        <tr>
+            <td><a href="/broker/{{ broker.id }}">{{ broker.name }}</a></td>
+            <td class="muted">{{ broker.category }}</td>
+            <td class="muted">{{ broker.contact_method }}</td>
+            <td class="muted">{{ "•" * broker.difficulty }}</td>
+            <td><span class="badge s-{{ r.status }}">{{ STATUS_LABELS[r.status] }}</span></td>
+        </tr>
+    {% endfor %}
+    </tbody>
+</table>
+{% endblock %}

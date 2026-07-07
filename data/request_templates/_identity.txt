@@ -1,0 +1,9 @@
+  Full name: {{ profile.full_name }}
+{% if profile.aliases %}  Also known as: {{ profile.aliases }}
+{% endif %}{% if profile.date_of_birth %}  Date of birth: {{ profile.date_of_birth }}
+{% endif %}{% if profile.emails %}  Email address(es):
+{% for e in profile.email_list() %}    - {{ e }}
+{% endfor %}{% endif %}{% if profile.phones %}  Phone number(s): {{ profile.phones }}
+{% endif %}{% if profile.addresses %}  Address(es):
+{% for a in profile.addresses.splitlines() if a.strip() %}    - {{ a.strip() }}
+{% endfor %}{% endif %}

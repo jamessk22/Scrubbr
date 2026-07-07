@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}Dashboard &middot; Personal Incogni{% endblock %}
+{% block body %}
+<h1>Dashboard</h1>
+
+{% if not profile_ready %}
+<div class="banner warn">
+    Your <a href="/profile">profile</a> is empty. Fill it in before sending requests &mdash;
+    the generated emails use it to identify your records.
+</div>
+{% endif %}
+
+<section class="stats">
+    <div class="stat"><span class="num">{{ total }}</span><span class="lbl">Brokers</span></div>
+    <div class="stat"><span class="num">{{ counts.get('sent', 0) }}</span><span class="lbl">Sent</span></div>
+    <div class="stat good"><span class="num">{{ counts.get('confirmed', 0) }}</span><span class="lbl">Confirmed</span></div>
+    <div class="stat warn"><span class="num">{{ counts.get('needs_verification', 0) }}</span><span class="lbl">Needs verification</span></div>
+    <div class="stat bad"><span class="num">{{ counts.get('rejected', 0) }}</span><span class="lbl">Rejected</span></div>
+    <div class="stat"><span class="num">{{ counts.get('not_started', 0) }}</span><span class="lbl">Not started</span></div>
+</section>
+
+<section class="inbox-bar">
+    <form method="post" action="/inbox/poll">
+        <button type="submit" {% if not imap_enabled %}disabled title="Enable IMAP in config.toml"{% endif %}>
+            Check inbox
+        </button>
+    </form>
+    {% if not imap_enabled %}<span class="muted">IMAP disabled &mdash; enable it in config.toml to auto-update statuses from replies.</span>{% endif %}
+    {% if review_count %}<a class="pill warn" href="/review">{{ review_count }} to review</a>{% endif %}
+</section>
+
+{% if due_brokers %}
+<section>
+    <h2>Due for follow-up</h2>
+    <p class="muted">Brokers re-list data. These are due for a fresh request.</p>
+    <ul class="due">
+    {% for broker, r in due_brokers %}
+        <li><a href="/broker/{{ broker.id }}">{{ broker.name }}</a>
+            <span class="muted">due {{ r.next_due }}</span></li>
+    {% endfor %}
+    </ul>
+</section>
+{% endif %}
+
+<section>
+    <h2>All brokers</h2>
+    <table>
+        <thead><tr><th>Broker</th><th>Category</th><th>Status</th><th>Next due</th></tr></thead>
+        <tbody>
+        {% for broker, r in rows %}
+            <tr>
+                <td><a href="/broker/{{ broker.id }}">{{ broker.name }}</a></td>
+                <td class="muted">{{ broker.category }}</td>
+                <td><span class="badge s-{{ r.status }}">{{ STATUS_LABELS[r.status] }}</span></td>
+                <td class="muted">{{ r.next_due or "&mdash;" | safe }}</td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</section>
+{% endblock %}

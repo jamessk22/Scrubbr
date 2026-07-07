@@ -1,0 +1,24 @@
+Subject: GDPR Article 17 Erasure Request [{{ tag }}]
+
+To the Data Protection Officer at {{ broker.name }},
+
+I am submitting this request as the data subject under the EU General Data
+Protection Regulation (and UK GDPR where applicable).
+
+I exercise my right to erasure under Article 17 and request that you erase all
+personal data you hold concerning me without undue delay. I also object, under
+Article 21, to any processing of my personal data for direct marketing or
+profiling purposes.
+
+To help you locate my records, my identifying information is below:
+
+{% include "_identity.txt" %}
+
+Under Article 12(3), you must respond within one month. Pursuant to Article 15,
+please also confirm what categories of my personal data you processed, the
+recipients, and the sources. Please confirm the erasure in writing to this
+email address, and inform any recipients of my data of this erasure request
+under Article 19.
+
+Thank you,
+{{ profile.full_name }}

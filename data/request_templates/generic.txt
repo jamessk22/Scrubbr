@@ -1,0 +1,21 @@
+Subject: Personal Information Deletion and Opt-Out Request [{{ tag }}]
+
+To the Privacy Team at {{ broker.name }},
+
+I am writing as the individual whose data is at issue to request that you
+delete all personal information you hold about me and opt me out of any sale,
+sharing, or licensing of that information. Where my state or country grants a
+statutory right to deletion or opt-out of sale (including but not limited to
+CCPA/CPRA, and the consumer privacy acts of Virginia, Colorado, Connecticut,
+Utah, Texas, Oregon, and Montana), I invoke it here.
+
+To help you locate my records, my identifying information is below:
+
+{% include "_identity.txt" %}
+
+Please confirm in writing once my information has been deleted and suppressed,
+and do not require me to create an account to exercise these rights. Please
+reply to this email address.
+
+Thank you,
+{{ profile.full_name }}

@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python3 -m venv .venv)",
+      "Bash(.venv/bin/python -m scripts.seed_brokers)",
+      "Bash(curl -s -o /dev/null -w \"dashboard HTTP %{http_code}\\\\n\" http://127.0.0.1:8137/)",
+      "Bash(open http://127.0.0.1:8137/)",
+      "Bash(cd *)"
+    ]
+  }
+}

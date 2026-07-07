@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Profile &middot; Personal Incogni{% endblock %}
+{% block body %}
+<h1>Your profile</h1>
+<p class="muted">Stored locally in SQLite and only used to fill removal requests. The more
+identifiers you provide, the more listings brokers can match and remove.</p>
+
+<form method="post" action="/profile" class="profile">
+    <label>Full name
+        <input type="text" name="full_name" value="{{ profile.full_name }}" required>
+    </label>
+    <label>Also known as / maiden names <span class="muted">(comma-separated)</span>
+        <input type="text" name="aliases" value="{{ profile.aliases }}">
+    </label>
+    <label>Email addresses <span class="muted">(one per line or comma-separated; first is primary)</span>
+        <textarea name="emails" rows="3">{{ profile.emails }}</textarea>
+    </label>
+    <label>Phone numbers
+        <input type="text" name="phones" value="{{ profile.phones }}">
+    </label>
+    <label>Addresses <span class="muted">(one per line, current first)</span>
+        <textarea name="addresses" rows="4">{{ profile.addresses }}</textarea>
+    </label>
+    <label>Date of birth
+        <input type="text" name="date_of_birth" value="{{ profile.date_of_birth }}" placeholder="YYYY-MM-DD">
+    </label>
+    <button type="submit">Save profile</button>
+</form>
+{% endblock %}
