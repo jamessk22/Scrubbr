@@ -1,4 +1,4 @@
-# Personal Incogni
+# Scrubber
 
 A local, self-hosted data-broker removal assistant — a subscription-free
 reimplementation of [Incogni](https://incogni.com/)'s core workflow that keeps

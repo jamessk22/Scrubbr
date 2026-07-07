@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.[[README]]
 
-Personal Incogni is a local, subscription-free reimplementation of Incogni's data-broker
+Scrubber is a local, subscription-free reimplementation of Incogni's data-broker
 removal workflow. It generates legal deletion/opt-out requests from your profile, tracks
 per-broker status, and monitors an IMAP mailbox to auto-advance statuses from broker replies.
 Everything runs on your machine; PII never leaves it. See `README.md` for product framing and

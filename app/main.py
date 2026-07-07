@@ -20,7 +20,7 @@ from .models import (
     Profile,
 )
 
-app = FastAPI(title="Personal Incogni")
+app = FastAPI(title="Scrubber")
 app.mount("/static", StaticFiles(directory=str(ROOT / "app" / "static")), name="static")
 views = Jinja2Templates(directory=str(ROOT / "app" / "templates"))
 
