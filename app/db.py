@@ -36,7 +36,8 @@ CREATE TABLE IF NOT EXISTS profile (
     emails TEXT DEFAULT '',
     phones TEXT DEFAULT '',
     addresses TEXT DEFAULT '',
-    date_of_birth TEXT DEFAULT ''
+    date_of_birth TEXT DEFAULT '',
+    state TEXT DEFAULT ''
 );
 
 CREATE TABLE IF NOT EXISTS requests (
@@ -80,7 +81,15 @@ def connect(db_path: Path | str = DEFAULT_DB_PATH) -> sqlite3.Connection:
 def init_db(conn: sqlite3.Connection) -> None:
     conn.executescript(SCHEMA)
     conn.execute("INSERT OR IGNORE INTO profile (id) VALUES (1)")
+    _migrate(conn)
     conn.commit()
+
+
+def _migrate(conn: sqlite3.Connection) -> None:
+    """Additive migrations for DBs created before a column existed."""
+    cols = {r["name"] for r in conn.execute("PRAGMA table_info(profile)")}
+    if "state" not in cols:
+        conn.execute("ALTER TABLE profile ADD COLUMN state TEXT DEFAULT ''")
 
 
 # --- Brokers ---------------------------------------------------------------
@@ -130,7 +139,7 @@ def save_profile(conn: sqlite3.Connection, data: dict) -> None:
     conn.execute(
         """UPDATE profile SET full_name=:full_name, aliases=:aliases,
              emails=:emails, phones=:phones, addresses=:addresses,
-             date_of_birth=:date_of_birth WHERE id = 1""",
+             date_of_birth=:date_of_birth, state=:state WHERE id = 1""",
         data,
     )
     conn.commit()

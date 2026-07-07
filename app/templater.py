@@ -1,7 +1,15 @@
 """Renders a broker-specific legal request from the profile + a template.
 
-The first template line is the Subject; the rest is the body. Template
-selection is driven by the broker's jurisdiction field.
+The first template line is the Subject; the rest is the body.
+
+Template selection reflects who can actually invoke which law:
+  - EU/UK brokers are governed by GDPR by virtue of being an EU/UK establishment
+    (GDPR Art. 3(1)), so those always use the GDPR template regardless of where
+    the user lives.
+  - US brokers are governed by US state consumer-privacy law, and that right
+    follows the *user's* residency, not the broker. Only California residents
+    can invoke the CCPA; everyone else uses the generic multi-state template,
+    which never asserts residency in a state the user doesn't live in.
 """
 from dataclasses import dataclass
 
@@ -20,13 +28,8 @@ _env = Environment(
     keep_trailing_newline=True,
 )
 
-# Map a broker jurisdiction to its template file.
-_JURISDICTION_TEMPLATE = {
-    "CCPA": "ccpa.txt",
-    "GDPR": "gdpr.txt",
-    "UK-GDPR": "gdpr.txt",
-    "generic": "generic.txt",
-}
+# Broker jurisdictions that are governed by GDPR (EU/UK establishment).
+_GDPR_JURISDICTIONS = {"GDPR", "UK-GDPR"}
 
 
 @dataclass
@@ -41,15 +44,20 @@ def request_tag(request_id: int, prefix: str = "PIR") -> str:
     return f"{prefix}-{request_id}"
 
 
-def template_for(broker: Broker) -> str:
-    return _JURISDICTION_TEMPLATE.get(broker.jurisdiction, "generic.txt")
+def template_for(broker: Broker, profile: Profile) -> str:
+    if broker.jurisdiction in _GDPR_JURISDICTIONS:
+        return "gdpr.txt"
+    # US broker: the applicable state law is the user's, not the broker's.
+    if profile.is_california():
+        return "ccpa.txt"
+    return "generic.txt"
 
 
 def render(
     broker: Broker, profile: Profile, request_id: int, tag_prefix: str = "PIR"
 ) -> RenderedRequest:
     tag = request_tag(request_id, tag_prefix)
-    template = _env.get_template(template_for(broker))
+    template = _env.get_template(template_for(broker, profile))
     text = template.render(broker=broker, profile=profile, tag=tag)
 
     lines = text.splitlines()

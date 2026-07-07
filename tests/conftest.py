@@ -22,6 +22,6 @@ def profile():
     return Profile(
         full_name="Jane Q. Public", aliases="Jane Public",
         emails="jane@example.com, jq@example.com", phones="555-0100",
-        addresses="123 Main St, Springfield CA 90000\n456 Old Rd, Fresno CA 93700",
-        date_of_birth="1990-01-15",
+        addresses="10 Beacon St, Boston MA 02108",
+        date_of_birth="1990-01-15", state="Massachusetts",
     )

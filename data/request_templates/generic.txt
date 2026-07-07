@@ -2,12 +2,14 @@ Subject: Personal Information Deletion and Opt-Out Request [{{ tag }}]
 
 To the Privacy Team at {{ broker.name }},
 
-I am writing as the individual whose data is at issue to request that you
-delete all personal information you hold about me and opt me out of any sale,
-sharing, or licensing of that information. Where my state or country grants a
-statutory right to deletion or opt-out of sale (including but not limited to
-CCPA/CPRA, and the consumer privacy acts of Virginia, Colorado, Connecticut,
-Utah, Texas, Oregon, and Montana), I invoke it here.
+I am writing as the individual whose data is at issue{% if profile.state %}, a
+resident of {{ profile.state }},{% endif %} to request that you delete all
+personal information you hold about me and opt me out of any sale, sharing, or
+licensing of that information. To the extent the law of my state of residence
+grants a statutory right to deletion or opt-out of sale, I invoke it here. I
+also note that many states now provide such rights (including California,
+Virginia, Colorado, Connecticut, Utah, Texas, Oregon, and Montana), and I ask
+that you extend the same treatment to my records.
 
 To help you locate my records, my identifying information is below:
 

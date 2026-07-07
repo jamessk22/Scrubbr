@@ -35,9 +35,12 @@ framework. `app/main.py` holds every route; the rest of `app/` is a thin layered
 - **`models.py`** — dataclasses + the status/contact-method/cadence constants. The status pipeline
   is `not_started → sent → confirmed | rejected | needs_verification`; `TERMINAL_STATUSES` and
   `FOLLOWUP_DAYS` (60 people-search / 90 else) live here.
-- **`templater.py`** — renders a broker's request. **Template choice is driven by
-  `broker.jurisdiction`** (`_JURISDICTION_TEMPLATE` → ccpa/gdpr/generic in
-  `data/request_templates/`). First template line is the `Subject:`, rest is body.
+- **`templater.py`** — renders a broker's request. **Template choice reflects who can
+  invoke which law**: GDPR/UK-GDPR brokers always use the GDPR template (the broker is an
+  EU/UK establishment); US brokers use a state-law template chosen from the *user's*
+  residency (`profile.state`) — California → `ccpa.txt`, everyone else → `generic.txt`,
+  which never asserts residency in a state the user doesn't live in. First template line
+  is the `Subject:`, rest is body.
 - **`inbox.py`** — IMAP poll + `classify()`. Replies are tied to a request via a `[PIR-<id>]`
   subject tag (`request_tag`); classification advances status, and anything ambiguous or
   unmatched is flagged `needs_review` for the review queue. **Never sends/replies/deletes.**
@@ -50,8 +53,10 @@ framework. `app/main.py` holds every route; the rest of `app/` is a thin layered
 - **v1 is manual-send by design.** The app presents requests and tracks status; the user does the
   actual emailing/form-filling. Don't add auto-sending without it being an explicit v2 task.
 - **`data/brokers.json` is the source of truth** for the broker registry — edit it and re-seed
-  rather than writing brokers directly to the DB. Each broker's `jurisdiction` selects its legal
-  template and `category` sets its follow-up cadence, so those fields are load-bearing, not cosmetic.
+  rather than writing brokers directly to the DB. A broker's `jurisdiction` marks its regime
+  (`US` vs `GDPR`/`UK-GDPR`) and `category` sets its follow-up cadence, so those fields are
+  load-bearing, not cosmetic. For US brokers the exact state-law template comes from the user's
+  `profile.state`, not the broker.
 - **The `[PIR-<id>]` subject tag is the correlation key** between an outbound request and its
   inbound reply. Any change to how subjects are generated must stay in sync with the regex in
   `inbox.py`.

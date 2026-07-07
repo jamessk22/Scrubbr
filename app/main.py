@@ -142,6 +142,7 @@ def profile_page(request: HttpRequest):
 def save_profile(
     full_name: str = Form(""), aliases: str = Form(""), emails: str = Form(""),
     phones: str = Form(""), addresses: str = Form(""), date_of_birth: str = Form(""),
+    state: str = Form(""),
 ):
     conn = get_conn()
     try:
@@ -149,6 +150,7 @@ def save_profile(
             "full_name": full_name.strip(), "aliases": aliases.strip(),
             "emails": emails.strip(), "phones": phones.strip(),
             "addresses": addresses.strip(), "date_of_birth": date_of_birth.strip(),
+            "state": state.strip(),
         })
         return RedirectResponse("/", status_code=303)
     finally:

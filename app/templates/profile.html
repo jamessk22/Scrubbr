@@ -21,6 +21,9 @@ identifiers you provide, the more listings brokers can match and remove.</p>
     <label>Addresses <span class="muted">(one per line, current first)</span>
         <textarea name="addresses" rows="4">{{ profile.addresses }}</textarea>
     </label>
+    <label>State of residence <span class="muted">(determines which state privacy law your requests cite)</span>
+        <input type="text" name="state" value="{{ profile.state }}" placeholder="e.g. Massachusetts">
+    </label>
     <label>Date of birth
         <input type="text" name="date_of_birth" value="{{ profile.date_of_birth }}" placeholder="YYYY-MM-DD">
     </label>

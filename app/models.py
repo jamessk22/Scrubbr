@@ -49,6 +49,7 @@ class Profile:
     phones: str = ""
     addresses: str = ""  # newline-separated, current first
     date_of_birth: str = ""
+    state: str = ""  # US state of residence; drives which state-law template applies
 
     def email_list(self) -> list[str]:
         return [e.strip() for e in self.emails.replace(",", "\n").splitlines() if e.strip()]
@@ -56,6 +57,9 @@ class Profile:
     def primary_email(self) -> str:
         emails = self.email_list()
         return emails[0] if emails else ""
+
+    def is_california(self) -> bool:
+        return self.state.strip().lower() in ("ca", "california")
 
 
 @dataclass
