@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_exposure.html" import exposure_badge %}
+{% from "_exposure.html" import exposure_badge with context %}
 {% block title %}Scan &middot; Scrubbr{% endblock %}
 {% block body %}
 <h1>Exposure scan</h1>
@@ -47,8 +47,8 @@ Requests go straight from this machine to the broker, at a slow, human-like pace
             <tr>
                 <td><a href="/broker/{{ row.broker.id }}?profile_id={{ profile.id }}">{{ row.broker.name }}</a></td>
                 <td>
-                    {{ exposure_badge(row.status, row.broker.id, profile.id, "/scan?profile_id=" ~ profile.id,
-                                       source=row.source, likely_via=row.likely_via, elem_id="exp-" ~ row.broker.id) }}
+                    {{ exposure_badge(row.status, row.broker.id, profile.id,
+                                       source=row.source, likely_via=row.likely_via) }}
                 </td>
                 <td>
                     {% if not row.manual_only %}
@@ -160,7 +160,7 @@ function pollBulkScan() {
             progress.textContent = `Scanning ${state.done} of ${state.total}…`;
         }
         for (const [brokerId, result] of Object.entries(state.results || {})) {
-            const badge = document.getElementById('exp-' + brokerId);
+            const badge = document.getElementById('exp-' + brokerId + '-{{ profile.id }}');
             if (badge) {
                 badge.className = 'badge e-' + result.status;
                 badge.textContent = LABELS[result.status] || result.status;

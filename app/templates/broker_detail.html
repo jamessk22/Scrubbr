@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_exposure.html" import exposure_badge %}
+{% from "_exposure.html" import exposure_badge with context %}
 {% block title %}{{ broker.name }} &middot; Scrubbr{% endblock %}
 {% block body %}
 <p><a href="/brokers">&larr; All brokers</a></p>
@@ -37,7 +37,7 @@
 <section class="profile-entry">
     <h2>{% if multi_profile %}{{ e.profile.name }} &middot; {% endif %}Removal request
         <span class="badge s-{{ e.req.status }}">{{ STATUS_LABELS[e.req.status] }}</span>
-        {{ exposure_badge(e.exposure, broker.id, e.profile.id, "/broker/" ~ broker.id ~ "?profile_id=" ~ e.profile.id) }}</h2>
+        {{ exposure_badge(e.exposure, broker.id, e.profile.id) }}</h2>
 
     {% if e.search_link %}
     <div class="mark-row">

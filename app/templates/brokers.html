@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_exposure.html" import exposure_badge %}
+{% from "_exposure.html" import exposure_badge with context %}
 {% block title %}Brokers &middot; Scrubbr{% endblock %}
 {% block body %}
 <h1>Broker directory</h1>
@@ -60,8 +60,7 @@
             <td class="muted">{{ broker.category }}</td>
             <td class="muted">{{ broker.contact_method }}</td>
             <td class="muted">{{ "•" * broker.difficulty }}</td>
-            <td>{{ exposure_badge(exposure, broker.id, profile.id,
-                                   "/brokers?profile_id=" ~ selected_profile ~ "&category=" ~ sel_category ~ "&status=" ~ sel_status ~ "&exposure=" ~ sel_exposure ~ ("&show_all=1" if show_all else "")) }}</td>
+            <td>{{ exposure_badge(exposure, broker.id, profile.id) }}</td>
             <td><span class="badge s-{{ r.status }}">{{ STATUS_LABELS[r.status] }}</span></td>
         </tr>
     {% endfor %}
