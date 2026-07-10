@@ -89,17 +89,19 @@ def _visible_text(soup: BeautifulSoup) -> str:
 
 
 def extract(html: str, source_url: str, scan_config: dict | None, query_name: str = "") -> ExtractResult:
-    soup = BeautifulSoup(html, "html.parser")
-    if any(m in _visible_text(soup) for m in _NOT_FOUND_MARKERS):
-        return ExtractResult(NOT_FOUND)
-
     candidates = _extract_selectors(html, source_url, scan_config) if scan_config else []
     if not candidates:
         candidates = _extract_generic(html, source_url, query_name)
 
-    if not candidates:
-        return ExtractResult(PARSE_FAILED)
-    return ExtractResult(FOUND_CANDIDATES, candidates)
+    if candidates:
+        # Real listings win over footer copy like "Did not find who you were
+        # looking for?"; only consult the not-found markers when nothing parsed.
+        return ExtractResult(FOUND_CANDIDATES, candidates)
+
+    soup = BeautifulSoup(html, "html.parser")
+    if any(m in _visible_text(soup) for m in _NOT_FOUND_MARKERS):
+        return ExtractResult(NOT_FOUND)
+    return ExtractResult(PARSE_FAILED)
 
 
 def _text(el) -> str:

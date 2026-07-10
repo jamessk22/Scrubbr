@@ -3,6 +3,7 @@ classify them to auto-advance status. Never sends, deletes, or replies —
 ambiguous mail is queued for manual review.
 """
 import email
+import hashlib
 import imaplib
 import re
 from dataclasses import dataclass
@@ -120,6 +121,14 @@ def _plain_body(msg: Message) -> str:
     return ""
 
 
+def _fallback_message_id(msg: Message) -> str:
+    """Stable synthetic id for mail lacking a Message-ID header. Derived from
+    stable headers (From + Date + Subject), not the IMAP sequence number, which
+    shifts as the mailbox changes and would cause reprocessing/collisions."""
+    basis = "\x00".join(msg.get(h, "") for h in ("From", "Date", "Subject"))
+    return "nomsgid-" + hashlib.sha1(basis.encode("utf-8", "replace")).hexdigest()
+
+
 def _request_id_from_subject(subject: str, prefix: str) -> int | None:
     m = re.search(rf"{re.escape(prefix)}-(\d+)", subject)
     return int(m.group(1)) if m else None
@@ -159,7 +168,7 @@ def poll(conn, cfg: ImapConfig, limit: int = 200) -> PollResult:
             if typ != "OK" or not msg_data or not msg_data[0]:
                 continue
             msg = email.message_from_bytes(msg_data[0][1])
-            message_id = msg.get("Message-ID", f"nomsgid-{num.decode()}")
+            message_id = msg.get("Message-ID") or _fallback_message_id(msg)
             if db.message_seen(conn, message_id):
                 continue
             result.scanned += 1

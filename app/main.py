@@ -447,17 +447,21 @@ def review_page(request: HttpRequest):
         conn.close()
 
 
-@app.post("/review/{message_rowid}/resolve")
-def resolve_review(message_rowid: str, broker_id: int = Form(...), profile_id: int = Form(...), status: str = Form(...)):
+@app.post("/review/resolve")
+def resolve_review(message_id: str = Form(...), broker_id: int = Form(...), profile_id: int = Form(...), status: str = Form(...)):
     """Manually classify a review-queue message and apply status to its broker."""
     conn = get_conn()
     try:
+        if db.get_broker(conn, broker_id) is None:
+            # Bogus broker id from the free-text field: don't INSERT a dangling
+            # FK (IntegrityError -> 500) or mark the item reviewed.
+            return RedirectResponse("/review", status_code=303)
         req = db.get_or_create_request(conn, broker_id, profile_id)
         if status in STATUS_LABELS:
             db.set_status(conn, req.id, status, note="Manual review resolution")
         conn.execute(
             "UPDATE seen_messages SET needs_review = 0 WHERE message_id = ?",
-            (message_rowid,),
+            (message_id,),
         )
         conn.commit()
         return RedirectResponse("/review", status_code=303)

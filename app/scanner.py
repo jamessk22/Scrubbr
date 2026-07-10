@@ -28,8 +28,11 @@ def search_context(profile: Profile) -> dict | None:
     city = ""
     line = profile.addresses.splitlines()[0] if profile.addresses else ""
     if "," in line:
-        # "10 Beacon St, Boston MA 02108" -> "Boston MA 02108" -> drop zip + state
-        tokens = [t for t in line.rsplit(",", 1)[1].split() if not t.isdigit()]
+        # "Street, City, ST ZIP" -> city is the second-to-last comma segment;
+        # "Street, City ST ZIP" -> the last segment holds city + state + zip.
+        segments = [s.strip() for s in line.split(",")]
+        city_seg = segments[-2] if len(segments) >= 3 else segments[-1]
+        tokens = [t for t in city_seg.split() if not t.isdigit()]
         if tokens and (tokens[-1].upper() in _STATE_ABBR.values() or tokens[-1].lower() in _STATE_ABBR):
             tokens = tokens[:-1]
         city = " ".join(tokens)

@@ -86,6 +86,18 @@ def test_no_scan_config_falls_back_to_generic_name_search():
     assert result.candidates[0].locations == ["Boston, MA"]
 
 
+def test_not_found_marker_does_not_override_real_candidates():
+    """A results page with real listings plus footer copy like "Did not find
+    who you were looking for?" must not be a false clean-bill (NOT_FOUND)."""
+    cfg = {"result_selector": ".card", "fields": {"name": "h2", "age": ".age"}}
+    html = ("<div class=card><h2>John Smith</h2><span class=age>Age 40</span></div>"
+            "<footer>Did not find who you were looking for? Try again.</footer>")
+    result = extract(html, "https://example.test", cfg, "John Smith")
+    assert result.outcome == FOUND_CANDIDATES
+    assert len(result.candidates) == 1
+    assert result.candidates[0].name == "John Smith"
+
+
 def test_no_scan_config_and_no_generic_hit_is_parse_failed():
     html = "<html><body><p>Totally unrelated page content.</p></body></html>"
     result = extract(html, "https://example.test", None, "Jane Public")

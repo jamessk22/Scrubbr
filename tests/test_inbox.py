@@ -1,4 +1,24 @@
-from app.inbox import classify
+import email
+
+from app.inbox import _fallback_message_id, classify
+
+
+def _msg(headers: str) -> email.message.Message:
+    return email.message_from_string(headers + "\n\nbody")
+
+
+def test_fallback_message_id_is_stable_across_sequence_changes():
+    """Mail without a Message-ID must get an id derived from stable headers,
+    not the IMAP sequence number (which shifts as the mailbox changes)."""
+    a = _msg("From: broker@x.test\nDate: Mon, 1 Jan 2026 10:00:00 -0000\nSubject: Re: request")
+    b = _msg("From: broker@x.test\nDate: Mon, 1 Jan 2026 10:00:00 -0000\nSubject: Re: request")
+    assert _fallback_message_id(a) == _fallback_message_id(b)
+
+
+def test_fallback_message_id_differs_for_different_mail():
+    a = _msg("From: broker@x.test\nDate: Mon, 1 Jan 2026 10:00:00 -0000\nSubject: Re: request")
+    c = _msg("From: other@x.test\nDate: Tue, 2 Jan 2026 11:00:00 -0000\nSubject: Different")
+    assert _fallback_message_id(a) != _fallback_message_id(c)
 
 
 def test_classify_confirmation():

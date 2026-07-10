@@ -36,6 +36,12 @@ def test_build_search_url_query_style():
     assert url == "https://example.test/results?name=Jane+Public&citystatezip=New+York+NY"
 
 
+def test_search_context_standard_usps_format_keeps_city():
+    # "Street, City, ST ZIP" -- the normal USPS format with a comma before the state.
+    p = Profile(full_name="John Smith", addresses="10 Beacon St, Boston, MA 02108", state="MA")
+    assert search_context(p)["city"] == "Boston"
+
+
 def test_search_context_without_city():
     p = Profile(full_name="Jane Public", addresses="", state="Massachusetts")
     assert search_context(p) == {"first": "Jane", "last": "Public", "city": "", "state": "MA"}

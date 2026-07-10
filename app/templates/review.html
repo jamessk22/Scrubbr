@@ -17,7 +17,8 @@ couldn't tie them to a request, or the wording was ambiguous. Resolve each one m
     <p class="muted">Classifier guess: <code>{{ m.classification }}</code>
         {% if m.broker %}&middot; matched broker: {{ m.broker.name }}{% else %}&middot; no matched broker{% endif %}
         {% if m.profile %}&middot; profile: {{ m.profile.name }}{% endif %}</p>
-    <form method="post" action="/review/{{ m.message_id }}/resolve" class="review-form">
+    <form method="post" action="/review/resolve" class="review-form">
+        <input type="hidden" name="message_id" value="{{ m.message_id }}">
         <input type="number" name="broker_id" placeholder="broker id"
                value="{{ m.broker.id if m.broker else '' }}" required>
         <select name="profile_id" required>
