@@ -34,11 +34,15 @@ OLDEST_AGE = 120  # upper bound for open-ended buckets like "65+"
 
 _STATE_NAMES = sorted(STATE_ABBR.keys(), key=len, reverse=True)
 _STATE_ABBRS = sorted(set(STATE_ABBR.values()), key=len, reverse=True)
+# Full names match case-insensitively (scoped inline flag); 2-letter abbreviations
+# must appear uppercase in the source text -- otherwise bare lowercase words like
+# "in"/"or"/"me" match as states in phrases like "living in Boston".
 _CITY_STATE_RE = re.compile(
-    r"([A-Za-z][A-Za-z .'-]{1,40}?),?\s+(" +
-    "|".join(_STATE_NAMES + _STATE_ABBRS) +
-    r")\b",
-    re.I,
+    r"([A-Za-z][A-Za-z .'-]{1,40}?),?\s+((?i:" +
+    "|".join(_STATE_NAMES) +
+    r")|" +
+    "|".join(_STATE_ABBRS) +
+    r")\b"
 )
 
 

@@ -3,7 +3,7 @@ import tomllib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-DEFAULT_DB_PATH = ROOT / "incogni.db"
+DEFAULT_DB_PATH = ROOT / "scrubbr.db"
 
 
 def load_config() -> dict:

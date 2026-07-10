@@ -163,3 +163,26 @@ def test_drifting_brokers_lists_repeat_failures_with_reason(conn, profile_id):
     _, streak, reason = drift[0]
     assert streak == 2
     assert reason == "Couldn't parse the results page"
+
+
+def test_drifting_brokers_reason_matches_the_max_streak_profile(conn, profile_id):
+    """In a multi-profile DB, the reported reason must come from whichever
+    profile's exposure row actually has the MAX(fail_streak), not just
+    whichever row the correlated subquery happened to pick."""
+    broker = _seed_broker(conn)
+    other_id = db.create_profile(conn, {
+        "name": "Other", "full_name": "John Q. Other", "aliases": "", "emails": "",
+        "phones": "", "addresses": "", "date_of_birth": "", "state": "",
+    }).id
+
+    db.set_exposure(conn, broker.id, profile_id, EXPOSURE_UNREACHABLE, "auto",
+                     snapshot='{"reason": "captcha"}')
+    for _ in range(2):
+        db.set_exposure(conn, broker.id, other_id, EXPOSURE_UNREACHABLE, "auto",
+                         snapshot='{"reason": "selector rot"}')
+
+    drift = db.drifting_brokers(conn, DRIFT_STREAK_THRESHOLD)
+    assert len(drift) == 1
+    _, streak, reason = drift[0]
+    assert streak == 2
+    assert reason == "selector rot"

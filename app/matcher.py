@@ -52,6 +52,17 @@ class MatchResult:
     signals: dict[str, bool | None] = field(default_factory=dict)
 
 
+_NAME_SUFFIXES = {"jr", "sr", "ii", "iii", "iv"}
+
+
+def _strip_suffix_parts(parts: list[str]) -> list[str]:
+    """Drop trailing generational suffixes (Jr, Sr, II..IV) so the last real
+    surname token is what the gate compares on, not "jr"."""
+    while parts and parts[-1].strip(".").lower() in _NAME_SUFFIXES:
+        parts = parts[:-1]
+    return parts
+
+
 def _norm_last(name: str) -> str:
     return name.strip().lower().replace("-", "").replace("'", "")
 
@@ -70,18 +81,20 @@ def _profile_aliases(profile: Profile) -> set[str]:
 
 
 def _profile_primary_name(profile: Profile) -> str:
-    parts = [p for p in profile.full_name.split() if not p.endswith(".")]
+    parts = _strip_suffix_parts([p for p in profile.full_name.split() if not p.endswith(".")])
     return f"{parts[0]} {parts[-1]}".strip().lower() if len(parts) >= 2 else ""
 
 
 def name_gate(candidate_name: str, profile: Profile) -> bool:
     """Last name exact, first name exact/nickname/alias. Discards non-matches
     before any scoring happens -- same-name-different-person is handled by
-    signal scoring, not by loosening this gate."""
-    parts = [p for p in profile.full_name.split() if not p.endswith(".")]
+    signal scoring, not by loosening this gate. Generational suffixes (Jr,
+    Sr, II..IV) are stripped from both sides first so "Skowronek Jr" still
+    gates on "skowronek", not "jr"."""
+    parts = _strip_suffix_parts([p for p in profile.full_name.split() if not p.endswith(".")])
     if len(parts) < 2:
         return False
-    cand_parts = candidate_name.split()
+    cand_parts = _strip_suffix_parts(candidate_name.split())
     if len(cand_parts) < 2:
         return False
     if _norm_last(cand_parts[-1]) != _norm_last(parts[-1]):
@@ -90,11 +103,19 @@ def name_gate(candidate_name: str, profile: Profile) -> bool:
 
 
 def _age_from_dob(dob: str) -> int | None:
+    """ISO (YYYY-MM-DD) is the documented format; MM/DD/YYYY is tolerated
+    since it's what a lot of people type without reading the hint."""
+    born = None
+    dob = dob.strip()
     try:
         y, m, d = (int(x) for x in dob.split("-"))
         born = date(y, m, d)
     except (ValueError, AttributeError):
-        return None
+        try:
+            m, d, y = (int(x) for x in dob.split("/"))
+            born = date(y, m, d)
+        except (ValueError, AttributeError):
+            return None
     today = date.today()
     return today.year - born.year - ((today.month, today.day) < (born.month, born.day))
 

@@ -103,6 +103,12 @@ CREATE TABLE IF NOT EXISTS scan_cooldowns (
 
 
 def connect(db_path: Path | str = DEFAULT_DB_PATH) -> sqlite3.Connection:
+    db_path = Path(db_path)
+    if not db_path.exists():
+        # One-time migration from the pre-rename filename (Scrubbr was "incogni").
+        old_path = db_path.parent / "incogni.db"
+        if old_path.exists():
+            old_path.rename(db_path)
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
@@ -370,12 +376,17 @@ def drifting_brokers(conn: sqlite3.Connection, min_streak: int) -> list[tuple[Br
     `unreachable` for some profile -- selector rot and dead domains surface here
     as a chore queue instead of quietly degrading into "not found"."""
     rows = conn.execute(
-        """SELECT b.*, MAX(e.fail_streak) AS streak,
-                  (SELECT snapshot FROM exposures
-                    WHERE broker_id = b.id ORDER BY fail_streak DESC LIMIT 1) AS last_snapshot
-             FROM brokers b JOIN exposures e ON e.broker_id = b.id
-            WHERE e.fail_streak >= ?
-            GROUP BY b.id ORDER BY streak DESC, b.name""",
+        """SELECT b.*, streaks.streak AS streak,
+                  (SELECT snapshot FROM exposures e2
+                    WHERE e2.broker_id = b.id AND e2.fail_streak = streaks.streak
+                    ORDER BY e2.checked_at DESC LIMIT 1) AS last_snapshot
+             FROM brokers b
+             JOIN (
+                 SELECT broker_id, MAX(fail_streak) AS streak
+                   FROM exposures GROUP BY broker_id
+                 HAVING MAX(fail_streak) >= ?
+             ) streaks ON streaks.broker_id = b.id
+            ORDER BY streak DESC, b.name""",
         (min_streak,),
     ).fetchall()
     out = []

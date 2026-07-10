@@ -152,6 +152,13 @@ def test_normalize_location_empty_returns_none():
     assert normalize_location("") is None
 
 
+def test_normalize_location_lowercase_word_is_not_mistaken_for_state_abbr():
+    """"in"/"or"/"me" are real two-letter state abbreviations but also common
+    lowercase words -- only an uppercase abbreviation should match."""
+    assert normalize_location("living in Boston") is None
+    assert normalize_location("Boston, IN") == "Boston, IN"
+
+
 # --- parse_scan_config ----------------------------------------------------------
 
 def test_parse_scan_config_valid_json():

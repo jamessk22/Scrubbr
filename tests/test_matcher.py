@@ -48,6 +48,18 @@ def test_name_gate_incomplete_profile_name_fails():
     assert not name_gate("Jane Public", Profile(full_name="Cher"))
 
 
+def test_name_gate_suffix_on_profile_side_ignored():
+    assert name_gate("Jane Public", _profile(full_name="Jane Public Jr", aliases=""))
+
+
+def test_name_gate_suffix_on_candidate_side_ignored():
+    assert name_gate("Jane Public Jr.", _profile())
+
+
+def test_name_gate_suffix_on_both_sides_ignored():
+    assert name_gate("Jane Public III", _profile(full_name="Jane Public Sr", aliases=""))
+
+
 # --- signals -------------------------------------------------------------------
 
 def test_signal_age_within_tolerance():
@@ -188,6 +200,22 @@ def test_age_signal_uncomparable_without_age_or_dob():
     assert _age_signal() is None
     c = CandidateListing(name="Jane Public", age=36)
     assert compute_signals(c, _profile(date_of_birth=""))["age"] is None
+
+
+def test_age_signal_tolerates_mm_dd_yyyy_dob():
+    """DOB format is documented as ISO but shouldn't silently kill the age
+    signal for the common MM/DD/YYYY alternate."""
+    from datetime import date
+    age = date.today().year - 1990 - ((date.today().month, date.today().day) < (1, 15))
+    profile = _profile(date_of_birth="01/15/1990")
+    c = CandidateListing(name="Jane Public", age=age)
+    assert compute_signals(c, profile)["age"] is True
+
+
+def test_age_signal_unrecognized_dob_format_is_none():
+    profile = _profile(date_of_birth="Jan 15 1990")
+    c = CandidateListing(name="Jane Public", age=36)
+    assert compute_signals(c, profile)["age"] is None
 
 
 def test_bucketed_age_can_earn_a_found_verdict():

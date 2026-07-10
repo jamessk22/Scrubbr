@@ -19,19 +19,23 @@ python3 -m venv .venv
 .venv/bin/python -m pytest tests/test_inbox.py::test_classify_confirmation   # single test
 ```
 
-The SQLite DB (`incogni.db`) and `config.toml` are gitignored and created on demand — `init_db`
+The SQLite DB (`scrubbr.db`) and `config.toml` are gitignored and created on demand — `init_db`
 runs on every request via `get_conn()`, and `seed_brokers` is idempotent (upsert by broker name).
-Deleting `incogni.db` fully resets state; re-seed afterward.
+Deleting `scrubbr.db` fully resets state; re-seed afterward. (`db.connect()` auto-renames a
+pre-existing `incogni.db` to `scrubbr.db` on first connect, for anyone upgrading from before
+the product rename.)
 
 ## Architecture
 
 Python + FastAPI + SQLite (`sqlite3`, no ORM) + Jinja2. Server-rendered HTML, no front-end
 framework. `app/main.py` holds every route; the rest of `app/` is a thin layered core:
 
-- **`db.py`** — schema + all queries. Tables: `brokers`, `profile` (single row, id=1),
-  `requests` (one per broker, **auto-created lazily** by `get_or_create_request`),
-  `request_history`, `seen_messages` (makes IMAP polling idempotent). `set_status` is the only
-  status mutator — it writes history and, on `sent`, stamps `next_due` from the broker's category.
+- **`db.py`** — schema + all queries. Tables: `brokers`, `profiles` (multi-profile — one row
+  per tracked person), `requests` (unique on `(broker_id, profile_id)`, **auto-created lazily**
+  by `get_or_create_request`), `request_history`, `exposures` (also unique on `(broker_id,
+  profile_id)` — the scan pipeline's per-profile verdict), `seen_messages` (makes IMAP polling
+  idempotent). `set_status` is the only status mutator — it writes history and, on `sent`,
+  stamps `next_due` from the broker's category.
 - **`models.py`** — dataclasses + the status/contact-method/cadence constants. The status pipeline
   is `not_started → sent → confirmed | rejected | needs_verification`; `TERMINAL_STATUSES` and
   `FOLLOWUP_DAYS` (60 people-search / 90 else) live here.
