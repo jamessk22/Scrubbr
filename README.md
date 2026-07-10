@@ -12,7 +12,7 @@ never leaves your computer.
 
 ## What it does (v1)
 
-- **Broker directory** — 65 curated high-priority US brokers (people-search,
+- **Broker directory** — 130 curated high-priority US brokers (people-search,
   marketing, risk, recruitment) with opt-out URLs/emails, contact method, legal
   basis, and difficulty. Seeded from `data/brokers.json`; easy to extend.
 - **Local profile** — your identifiers (name, aliases, emails, phones,
@@ -41,7 +41,7 @@ never leaves your computer.
   **Scan** page and click **Scan** (single broker) or **Scan all**; each
   scan launches a real browser and is rate-limited, so expect ~10-25s per
   broker, more for a bulk run.
-  **Only 5 of the 65 brokers are currently wired up for this** — Whitepages,
+  **Only 5 of the 130 brokers are currently wired up for this** — Whitepages,
   Radaris, FastPeopleSearch, TruePeopleSearch, That'sThem — because each one
   needs real CSS selectors hand-verified against its live results page
   (`scan` key in `data/brokers.json`). Every other broker, even ones that do

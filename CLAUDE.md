@@ -101,7 +101,12 @@ framework. `app/main.py` holds every route; the rest of `app/` is a thin layered
   PeopleFinders/SearchPeopleFree/FamilyTreeNow/VoterRecords/Clustrmaps); `verified: false` means the
   selectors haven't been confirmed against a live page yet. A broker having a real public search in the
   wild (e.g. CheckPeople) doesn't make it scannable in-app — it stays in the "assumed"/"not publicly
-  searchable" bucket until someone adds its `search_url`/`scan` config and verifies it. Growing this list
+  searchable" bucket until someone adds its `search_url`/`scan` config and verifies it. A `search_url`
+  (and its `verified: false` `scan` stub) may be **sourced from web research at broker-addition time** —
+  a plausible GET pattern with `notes: "URL pattern from web research …; not verified against a live
+  rendered page"` — not only from a live scan. Such entries are auto-scannable via extract.py's generic
+  fallback but stay untrusted until confirmed; `verify_scan` is still the only path to `verified: true` /
+  `url_confirmed`. Growing this list
   is manual, broker-by-broker work: `python -m scripts.verify_scan "<broker>" [--fixture]` runs a live
   scan (reading the real profile from gitignored `scan_profile.toml`), prints extraction + match, and
   `--fixture` writes a PII-scrubbed fixture. Committed fixtures are **synthetic** ("Jane Public"), never
@@ -124,3 +129,8 @@ framework. `app/main.py` holds every route; the rest of `app/` is a thin layered
   `config.example.toml`, so the app runs with IMAP disabled out of the box.
 - Broker opt-out URLs/emails drift constantly and are unverified — treat them as needing
   confirmation, not as ground truth.
+- **A new broker's `search_url` may come from web research**, recorded with a `scan` stub of
+  `{verified: false, search_url, notes: "URL pattern from web research <date>; not verified against a
+  live rendered page"}`. Never set `verified: true` or invent CSS selectors at addition time — live
+  confirmation via `scripts.verify_scan` is the only path to a trusted config. If a broker's search is
+  wizard/POST-only or not URL-addressable, omit `search_url` and say why in `notes`.
