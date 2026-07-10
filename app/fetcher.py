@@ -3,6 +3,7 @@ the network or a browser. Everything above this (extract/matcher/scan_service)
 runs against canned HTML in tests -- this module is the seam, same convention
 as sender.py for outbound email.
 """
+import contextlib
 import os
 import re
 from dataclasses import dataclass
@@ -13,6 +14,11 @@ from .config import ROOT, load_config
 
 BROWSER_DIR = ROOT / ".browser"
 DUMP_DIR = ROOT / ".scans"  # gitignored: raw pages contain real listings
+
+# Holds the persistent context opened by browser_session(), if any, so fetch()
+# can reuse it instead of paying browser startup per call. ratelimit.py caps
+# scan concurrency at 1, so a plain module-level slot (not per-thread) is safe.
+_active_context = None
 
 _BLOCKED_STATUS = {403, 429, 503}
 _BLOCKED_MARKERS = (
@@ -72,38 +78,74 @@ def _dump_html(url: str, html: str) -> None:
     (DUMP_DIR / f"{slug}.html").write_text(html)
 
 
+@contextlib.contextmanager
+def browser_session():
+    """Opens one persistent Chromium context and holds it open for the
+    duration of the `with` block, so a bulk scan (many fetch() calls in a
+    row) pays browser startup once instead of per broker. fetch() picks up
+    the active context automatically; callers that don't use this still get
+    today's launch-per-call behavior."""
+    from playwright.sync_api import sync_playwright
+
+    global _active_context
+    settings = scan_settings()
+    BROWSER_DIR.mkdir(exist_ok=True)
+    with sync_playwright() as p:
+        context = p.chromium.launch_persistent_context(str(BROWSER_DIR), headless=settings["headless"])
+        _active_context = context
+        try:
+            yield
+        finally:
+            _active_context = None
+            context.close()
+
+
+def _load(context, url: str, result_selector: str, settings: dict) -> tuple[str, str, int]:
+    nav_timeout_ms = settings["nav_timeout_s"] * 1000
+    page = context.new_page()
+    try:
+        response = page.goto(url, timeout=nav_timeout_ms)
+        status = response.status if response else 0
+        try:
+            page.wait_for_load_state("networkidle", timeout=nav_timeout_ms)
+        except Exception:
+            pass  # some sites never go idle (polling widgets); fall through with whatever loaded
+        if result_selector:
+            try:
+                page.wait_for_selector(result_selector, timeout=5000)
+            except Exception:
+                pass  # selector may be stale or genuinely absent (no results) -- extract.py decides
+        html = page.content()
+        final_url = page.url
+    finally:
+        page.close()
+    return html, final_url, status
+
+
 def fetch(url: str, result_selector: str = "") -> FetchResult:
     """Loads `url` in a persistent Chromium context (cookies/fingerprint
     accumulate across runs like a real user, in a gitignored .browser/ dir),
     waits for the page to settle, and returns its rendered HTML.
 
+    Reuses the context opened by browser_session() if one is active;
+    otherwise launches and tears down its own, as before.
+
     Raises Blocked on a CAPTCHA/challenge page or a 403/429/503 status.
     """
-    from playwright.sync_api import sync_playwright  # lazy: only this function needs a browser
-
     settings = scan_settings()
-    BROWSER_DIR.mkdir(exist_ok=True)
-    nav_timeout_ms = settings["nav_timeout_s"] * 1000
 
-    with sync_playwright() as p:
-        context = p.chromium.launch_persistent_context(str(BROWSER_DIR), headless=settings["headless"])
-        try:
-            page = context.new_page()
-            response = page.goto(url, timeout=nav_timeout_ms)
-            status = response.status if response else 0
+    if _active_context is not None:
+        html, final_url, status = _load(_active_context, url, result_selector, settings)
+    else:
+        from playwright.sync_api import sync_playwright  # lazy: only this path needs a browser
+
+        BROWSER_DIR.mkdir(exist_ok=True)
+        with sync_playwright() as p:
+            context = p.chromium.launch_persistent_context(str(BROWSER_DIR), headless=settings["headless"])
             try:
-                page.wait_for_load_state("networkidle", timeout=nav_timeout_ms)
-            except Exception:
-                pass  # some sites never go idle (polling widgets); fall through with whatever loaded
-            if result_selector:
-                try:
-                    page.wait_for_selector(result_selector, timeout=5000)
-                except Exception:
-                    pass  # selector may be stale or genuinely absent (no results) -- extract.py decides
-            html = page.content()
-            final_url = page.url
-        finally:
-            context.close()
+                html, final_url, status = _load(context, url, result_selector, settings)
+            finally:
+                context.close()
 
     if os.getenv("SCRUBBR_DUMP_HTML"):
         _dump_html(final_url, html)

@@ -261,6 +261,27 @@ def get_or_create_request(conn: sqlite3.Connection, broker_id: int, profile_id: 
     return _request(conn, row)
 
 
+def ensure_requests(conn: sqlite3.Connection, profile_id: int) -> dict[int, Request]:
+    """Bulk equivalent of get_or_create_request for every broker, scoped to one
+    profile: one INSERT OR IGNORE + one SELECT instead of a query (and possibly
+    an insert+commit) per broker. For list views only -- returned Requests have
+    empty history, since list templates don't show it."""
+    conn.execute(
+        "INSERT OR IGNORE INTO requests (broker_id, profile_id) SELECT id, ? FROM brokers",
+        (profile_id,),
+    )
+    conn.commit()
+    rows = conn.execute("SELECT * FROM requests WHERE profile_id = ?", (profile_id,)).fetchall()
+    return {
+        row["broker_id"]: Request(
+            id=row["id"], broker_id=row["broker_id"], profile_id=row["profile_id"],
+            status=row["status"], method=row["method"], sent_at=row["sent_at"],
+            next_due=row["next_due"], notes=row["notes"],
+        )
+        for row in rows
+    }
+
+
 def _request(conn: sqlite3.Connection, row: sqlite3.Row) -> Request:
     hist = conn.execute(
         "SELECT at, status, note FROM request_history WHERE request_id = ? ORDER BY at DESC, id DESC",

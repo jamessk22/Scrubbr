@@ -70,3 +70,46 @@ def test_resolve_review_bogus_broker_id_redirects_without_crash(client):
     ).fetchone()
     conn.close()
     assert row["needs_review"] == 1
+
+
+def test_scan_mark_honors_relative_back_param(client):
+    resp = client.post(f"/scan/{client.broker_id}/mark", data={
+        "profile_id": client.profile_id, "status": "found", "back": "/brokers?category=marketing",
+    }, follow_redirects=False)
+    assert resp.status_code == 303
+    assert resp.headers["location"] == "/brokers?category=marketing"
+
+
+def test_scan_mark_rejects_offsite_back_param(client):
+    """`back` must not be honored as an open redirect -- a protocol-relative
+    '//' target or an absolute URL must fall back to the default redirect."""
+    resp = client.post(f"/scan/{client.broker_id}/mark", data={
+        "profile_id": client.profile_id, "status": "found", "back": "//evil.example/phish",
+    }, follow_redirects=False)
+    assert resp.status_code == 303
+    assert resp.headers["location"] == f"/scan?profile_id={client.profile_id}"
+
+    resp = client.post(f"/scan/{client.broker_id}/mark", data={
+        "profile_id": client.profile_id, "status": "found", "back": "https://evil.example/phish",
+    }, follow_redirects=False)
+    assert resp.status_code == 303
+    assert resp.headers["location"] == f"/scan?profile_id={client.profile_id}"
+
+
+def test_scan_status_returns_empty_state_for_unknown_profile(client):
+    resp = client.get("/scan/status", params={"profile_id": 999999})
+    assert resp.status_code == 200
+    assert resp.json() == {"running": False, "total": 0, "done": 0, "results": {}}
+
+
+def test_scan_status_returns_snapshot_of_running_scan(client, monkeypatch):
+    """/scan/status must serialize a stable copy even while the background
+    scan thread is still writing into the same profile's results dict."""
+    monkeypatch.setattr(main, "_bulk_scans", {
+        client.profile_id: {"running": True, "total": 2, "done": 1, "results": {client.broker_id: {"status": "found", "detail": ""}}},
+    })
+    resp = client.get("/scan/status", params={"profile_id": client.profile_id})
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["running"] is True
+    assert body["results"] == {str(client.broker_id): {"status": "found", "detail": ""}}

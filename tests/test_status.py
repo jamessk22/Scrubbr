@@ -69,3 +69,22 @@ def test_due_requests_excludes_terminal_and_future(conn, profile_id):
     )
     conn.commit()
     assert db.due_requests(conn) == []
+
+
+def test_ensure_requests_creates_one_row_per_broker_and_is_idempotent(conn, profile_id):
+    db.upsert_broker(conn, BROKER)
+    db.upsert_broker(conn, PRIVATE_BROKER)
+    brokers = db.all_brokers(conn)
+
+    result = db.ensure_requests(conn, profile_id)
+    assert set(result.keys()) == {b.id for b in brokers}
+    assert all(r.status == "not_started" for r in result.values())
+
+    # Existing status/history must survive a second call (no clobbering).
+    some_id = brokers[0].id
+    req = db.get_or_create_request(conn, some_id, profile_id)
+    db.set_status(conn, req.id, STATUS_SENT)
+
+    result2 = db.ensure_requests(conn, profile_id)
+    assert result2[some_id].status == STATUS_SENT
+    assert len(result2) == len(brokers)

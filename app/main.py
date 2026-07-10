@@ -2,6 +2,7 @@
 and IMAP-driven review queue. Server-rendered HTML, no front-end framework.
 """
 import json
+import threading
 from collections import Counter
 
 from fastapi import BackgroundTasks, FastAPI, Form, Request as HttpRequest
@@ -87,8 +88,9 @@ def dashboard(request: HttpRequest, profile_id: str = "", show_all: str = ""):
         scope, selected = _profile_scope(profile_id, profiles)
         exposures = {p.id: db.exposures_for_profile(conn, p.id) for p in scope}
         networks = {p.id: found_networks(brokers, exposures[p.id]) for p in scope}
+        requests = {p.id: db.ensure_requests(conn, p.id) for p in scope}
         all_rows = [
-            (b, p, db.get_or_create_request(conn, b.id, p.id),
+            (b, p, requests[p.id][b.id],
              effective_exposure(b, exposures[p.id].get(b.id), networks[p.id]))
             for b in brokers for p in scope
         ]
@@ -124,13 +126,14 @@ def broker_list(request: HttpRequest, category: str = "", status: str = "",
         scope, selected = _profile_scope(profile_id, profiles)
         exposures = {p.id: db.exposures_for_profile(conn, p.id) for p in scope}
         networks = {p.id: found_networks(brokers, exposures[p.id]) for p in scope}
+        requests = {p.id: db.ensure_requests(conn, p.id) for p in scope}
         rows = []
         hidden = 0
         for b in brokers:
             if category and b.category != category:
                 continue
             for p in scope:
-                r = db.get_or_create_request(conn, b.id, p.id)
+                r = requests[p.id][b.id]
                 if status and r.status != status:
                     continue
                 exp = effective_exposure(b, exposures[p.id].get(b.id), networks[p.id])
@@ -206,6 +209,10 @@ def update_status(broker_id: int, profile_id: int = Form(...), status: str = For
 
 # profile_id -> {"running": bool, "total": int, "done": int, "results": {broker_id: {...}}}
 _bulk_scans: dict[int, dict] = {}
+# Guards _bulk_scans/its per-profile state dicts: the background scan thread
+# inserts into state["results"] while /scan/status concurrently serializes it,
+# which without a lock intermittently raises "dict changed size during iteration".
+_bulk_scans_lock = threading.Lock()
 
 
 def _run_bulk_scan(profile_id: int, broker_ids: list[int]) -> None:
@@ -213,25 +220,31 @@ def _run_bulk_scan(profile_id: int, broker_ids: list[int]) -> None:
     state = _bulk_scans[profile_id]
     try:
         profile = db.get_profile(conn, profile_id)
-        for broker_id in broker_ids:
-            try:
-                broker = db.get_broker(conn, broker_id)
-                if broker is None or profile is None:
-                    continue
-                if scan_service.is_cooled_down_for(conn, broker, profile):
-                    state["results"][broker_id] = {"status": EXPOSURE_UNREACHABLE, "detail": "Cooling down after rate limiting"}
-                    continue
-                outcome = scan_service.scan_and_persist(conn, broker, profile)
-                state["results"][broker_id] = {"status": outcome.status, "detail": outcome.detail}
-            except Exception as exc:
-                # One broker's failure must not abandon the rest of the run,
-                # or strand `running: True` forever (which would permanently
-                # disable the "Scan all" button).
-                state["results"][broker_id] = {"status": EXPOSURE_UNREACHABLE, "detail": str(exc)}
-            finally:
-                state["done"] += 1
+        with fetcher.browser_session():
+            for broker_id in broker_ids:
+                result = None
+                try:
+                    broker = db.get_broker(conn, broker_id)
+                    if broker is None or profile is None:
+                        continue
+                    if scan_service.is_cooled_down_for(conn, broker, profile):
+                        result = {"status": EXPOSURE_UNREACHABLE, "detail": "Cooling down after rate limiting"}
+                    else:
+                        outcome = scan_service.scan_and_persist(conn, broker, profile)
+                        result = {"status": outcome.status, "detail": outcome.detail}
+                except Exception as exc:
+                    # One broker's failure must not abandon the rest of the run,
+                    # or strand `running: True` forever (which would permanently
+                    # disable the "Scan all" button).
+                    result = {"status": EXPOSURE_UNREACHABLE, "detail": str(exc)}
+                finally:
+                    with _bulk_scans_lock:
+                        if result is not None:
+                            state["results"][broker_id] = result
+                        state["done"] += 1
     finally:
-        state["running"] = False
+        with _bulk_scans_lock:
+            state["running"] = False
         conn.close()
 
 
@@ -314,10 +327,11 @@ def scan_all(background_tasks: BackgroundTasks, profile_id: int = Form(...)):
             conn, db.all_brokers(conn), profile_id,
             settings["rescan_after_days"], settings["one_per_network"],
         )
-        existing = _bulk_scans.get(profile_id)
-        if not existing or not existing.get("running"):
-            _bulk_scans[profile_id] = {"running": True, "total": len(broker_ids), "done": 0, "results": {}}
-            background_tasks.add_task(_run_bulk_scan, profile_id, broker_ids)
+        with _bulk_scans_lock:
+            existing = _bulk_scans.get(profile_id)
+            if not existing or not existing.get("running"):
+                _bulk_scans[profile_id] = {"running": True, "total": len(broker_ids), "done": 0, "results": {}}
+                background_tasks.add_task(_run_bulk_scan, profile_id, broker_ids)
         return RedirectResponse(f"/scan?profile_id={profile_id}", status_code=303)
     finally:
         conn.close()
@@ -325,10 +339,19 @@ def scan_all(background_tasks: BackgroundTasks, profile_id: int = Form(...)):
 
 @app.get("/scan/status")
 def scan_status(profile_id: int):
-    state = _bulk_scans.get(profile_id)
-    if state is None:
-        return JSONResponse({"running": False, "total": 0, "done": 0, "results": {}})
-    return JSONResponse(state)
+    with _bulk_scans_lock:
+        state = _bulk_scans.get(profile_id)
+        if state is None:
+            return JSONResponse({"running": False, "total": 0, "done": 0, "results": {}})
+        return JSONResponse({**state, "results": dict(state["results"])})
+
+
+def _safe_redirect_target(back: str, default: str) -> str:
+    """Only honor `back` as a same-site relative path -- an unvalidated value
+    from a form field could otherwise redirect off-site ('//evil.example')."""
+    if back.startswith("/") and not back.startswith("//"):
+        return back
+    return default
 
 
 @app.post("/scan/{broker_id}/mark")
@@ -337,7 +360,8 @@ def scan_mark(broker_id: int, profile_id: int = Form(...), status: str = Form(..
     try:
         if status in (EXPOSURE_FOUND, EXPOSURE_NOT_FOUND):
             db.set_exposure(conn, broker_id, profile_id, status, "manual")
-        return RedirectResponse(back or f"/scan?profile_id={profile_id}", status_code=303)
+        target = _safe_redirect_target(back, f"/scan?profile_id={profile_id}")
+        return RedirectResponse(target, status_code=303)
     finally:
         conn.close()
 

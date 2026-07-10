@@ -16,7 +16,14 @@ from .models import (
     STATUS_CONFIRMED,
     STATUS_NEEDS_VERIFICATION,
     STATUS_REJECTED,
+    STATUS_SENT,
 )
+
+# A request can only be auto-advanced by a reply while it's actually in
+# flight. A `not_started` request was never emailed, and a terminal
+# confirmed/rejected request shouldn't be flipped by a stray or spoofed
+# reply carrying its tag -- either case goes to the review queue instead.
+_ADVANCABLE_STATUSES = {STATUS_SENT, STATUS_NEEDS_VERIFICATION}
 
 # classification -> resulting request status
 _STATUS_BY_CLASS = {
@@ -164,13 +171,23 @@ def poll(conn, cfg: ImapConfig, limit: int = 200) -> PollResult:
             return result
         ids = data[0].split()[-limit:]
         for num in reversed(ids):
+            # Headers-only pass first: computing the message id and checking
+            # seen_messages doesn't need the full body, and most of the ~200
+            # newest messages on a repeat poll are already seen.
+            typ, hdr_data = client.fetch(
+                num, "(BODY.PEEK[HEADER.FIELDS (MESSAGE-ID FROM DATE SUBJECT)])"
+            )
+            if typ != "OK" or not hdr_data or not hdr_data[0]:
+                continue
+            hdr_msg = email.message_from_bytes(hdr_data[0][1])
+            message_id = hdr_msg.get("Message-ID") or _fallback_message_id(hdr_msg)
+            if db.message_seen(conn, message_id):
+                continue
+
             typ, msg_data = client.fetch(num, "(RFC822)")
             if typ != "OK" or not msg_data or not msg_data[0]:
                 continue
             msg = email.message_from_bytes(msg_data[0][1])
-            message_id = msg.get("Message-ID") or _fallback_message_id(msg)
-            if db.message_seen(conn, message_id):
-                continue
             result.scanned += 1
 
             subject = _decode(msg.get("Subject"))
@@ -180,10 +197,11 @@ def poll(conn, cfg: ImapConfig, limit: int = 200) -> PollResult:
 
             classification = classify(subject, body)
             needs_review = 0
-            if req_id is not None and db.get_request(conn, req_id) is not None:
+            req = db.get_request(conn, req_id) if req_id is not None else None
+            if req is not None:
                 result.matched += 1
                 new_status = _STATUS_BY_CLASS.get(classification)
-                if new_status:
+                if new_status and req.status in _ADVANCABLE_STATUSES:
                     db.set_status(
                         conn, req_id, new_status,
                         note=f"Auto from reply: {subject[:80]}",
