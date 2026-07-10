@@ -3,8 +3,12 @@ __pycache__/
 .venv/
 venv/
 config.toml
+scan_profile.toml
+.browser/
+.scans/
 *.db
 *.db-journal
 .pytest_cache/
 .DS_Store
 settings.local.json
+docs/

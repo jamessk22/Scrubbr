@@ -16,3 +16,17 @@ folder = "INBOX"
 # Subject-line token prefix used to correlate broker replies to requests,
 # e.g. a generated subject includes "[PIR-42]". Keep it short and unique.
 request_tag_prefix = "PIR"
+
+[scan]
+# Playwright exposure scan. Run `playwright install chromium` once before using it.
+headless = true
+nav_timeout_s = 25
+# Jittered per-domain delay range (seconds) between requests to the same broker.
+min_delay_s = 8
+max_delay_s = 20
+# Skip re-scanning a broker until this many days after its last check
+# (a single-broker manual re-scan always bypasses this).
+rescan_after_days = 14
+# In a bulk scan, only scan one broker per `network` group; its siblings inherit
+# a derived "Likely exposed" verdict. Cuts requests per sweep.
+scan_one_per_network = false

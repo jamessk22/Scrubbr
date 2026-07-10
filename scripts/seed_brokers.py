@@ -19,7 +19,9 @@ def main() -> None:
     conn = db.connect()
     db.init_db(conn)
     for b in brokers:
-        db.upsert_broker(conn, b)
+        scan = b.pop("scan", None)
+        row = {**b, "scan_config": json.dumps(scan) if scan else "", "network": b.get("network") or ""}
+        db.upsert_broker(conn, row)
     conn.commit()
     total = conn.execute("SELECT COUNT(*) AS n FROM brokers").fetchone()["n"]
     print(f"Imported/updated {len(brokers)} brokers. Registry now holds {total}.")

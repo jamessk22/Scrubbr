@@ -30,21 +30,36 @@
             {% endfor %}
         </select>
     </label>
+    <label>Exposure
+        <select name="exposure" onchange="this.form.submit()">
+            <option value="">All</option>
+            {% for key, label in EXPOSURE_LABELS.items() %}
+            <option value="{{ key }}" {% if key == sel_exposure %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+        </select>
+    </label>
+    {% if show_all %}<input type="hidden" name="show_all" value="1">{% endif %}
     <noscript><button type="submit">Filter</button></noscript>
 </form>
 
-<p class="muted">{{ rows|length }} broker(s)</p>
+<p class="muted">{{ rows|length }} broker(s)
+{% if hidden %}&mdash; {{ hidden }} hidden (not listing your data),
+    <a href="/brokers?profile_id={{ selected_profile }}&category={{ sel_category }}&status={{ sel_status }}&show_all=1">show all</a>
+{% elif show_all %}&mdash; showing all,
+    <a href="/brokers?profile_id={{ selected_profile }}&category={{ sel_category }}&status={{ sel_status }}">hide not-found</a>
+{% endif %}</p>
 
 <table>
-    <thead><tr><th>Broker</th>{% if multi_profile %}<th>Profile</th>{% endif %}<th>Category</th><th>Method</th><th>Difficulty</th><th>Status</th></tr></thead>
+    <thead><tr><th>Broker</th>{% if multi_profile %}<th>Profile</th>{% endif %}<th>Category</th><th>Method</th><th>Difficulty</th><th>Exposure</th><th>Status</th></tr></thead>
     <tbody>
-    {% for broker, profile, r in rows %}
+    {% for broker, profile, r, exposure in rows %}
         <tr>
             <td><a href="/broker/{{ broker.id }}?profile_id={{ profile.id }}">{{ broker.name }}</a></td>
             {% if multi_profile %}<td class="muted">{{ profile.name }}</td>{% endif %}
             <td class="muted">{{ broker.category }}</td>
             <td class="muted">{{ broker.contact_method }}</td>
             <td class="muted">{{ "•" * broker.difficulty }}</td>
+            <td><span class="badge e-{{ exposure }}">{{ EXPOSURE_LABELS[exposure] }}</span></td>
             <td><span class="badge s-{{ r.status }}">{{ STATUS_LABELS[r.status] }}</span></td>
         </tr>
     {% endfor %}

@@ -35,7 +35,26 @@
 {% for e in entries %}
 <section class="profile-entry">
     <h2>{% if multi_profile %}{{ e.profile.name }} &middot; {% endif %}Removal request
-        <span class="badge s-{{ e.req.status }}">{{ STATUS_LABELS[e.req.status] }}</span></h2>
+        <span class="badge s-{{ e.req.status }}">{{ STATUS_LABELS[e.req.status] }}</span>
+        <span class="badge e-{{ e.exposure }}">{{ EXPOSURE_LABELS[e.exposure] }}</span></h2>
+
+    {% if e.search_link %}
+    <div class="mark-row">
+        <a href="{{ e.search_link }}" target="_blank" rel="noopener">Check listing</a>
+        <form method="post" action="/scan/{{ broker.id }}/mark">
+            <input type="hidden" name="profile_id" value="{{ e.profile.id }}">
+            <input type="hidden" name="status" value="found">
+            <input type="hidden" name="back" value="/broker/{{ broker.id }}?profile_id={{ e.profile.id }}">
+            <button type="submit">Found</button>
+        </form>
+        <form method="post" action="/scan/{{ broker.id }}/mark">
+            <input type="hidden" name="profile_id" value="{{ e.profile.id }}">
+            <input type="hidden" name="status" value="not_found">
+            <input type="hidden" name="back" value="/broker/{{ broker.id }}?profile_id={{ e.profile.id }}">
+            <button type="submit">Not found</button>
+        </form>
+    </div>
+    {% endif %}
 
     <div class="grid">
         <div>

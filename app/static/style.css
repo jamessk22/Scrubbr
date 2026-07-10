@@ -207,6 +207,93 @@ tbody tr:hover {
   color: #ffcf7f;
 }
 
+.e-unknown {
+  background: #2a2f3a;
+  color: var(--muted);
+}
+
+.e-found {
+  background: #3d2019;
+  color: #ff9d84;
+}
+
+.e-not_found {
+  background: #163a2a;
+  color: #7fe0b0;
+}
+
+.e-assumed {
+  background: #322042;
+  color: #cfa6ff;
+}
+
+.e-likely {
+  background: #3a2420;
+  color: #e8a08c;
+}
+
+.e-possible {
+  background: #3d3115;
+  color: #ffcf7f;
+}
+
+.e-unreachable {
+  background: #2a2f3a;
+  color: var(--muted);
+}
+
+.snapshot {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px 16px;
+  margin: 6px 0 14px;
+  font-size: 0.88rem;
+}
+
+.snapshot dl {
+  grid-template-columns: max-content 1fr;
+  margin-top: 8px;
+}
+
+.snapshot .signals {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+
+.signal {
+  font-size: 0.8rem;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--panel2);
+}
+
+.signal.yes {
+  color: var(--good);
+}
+
+.signal.no {
+  color: var(--bad);
+}
+
+.signal.na {
+  color: var(--muted);
+}
+
+.mark-cell,
+.mark-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.mark-row {
+  margin: 10px 0;
+  flex-wrap: wrap;
+}
+
 .banner {
   padding: 12px 16px;
   border-radius: 8px;

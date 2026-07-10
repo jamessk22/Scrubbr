@@ -47,6 +47,62 @@ framework. `app/main.py` holds every route; the rest of `app/` is a thin layered
   Verification demands are checked before confirmations on purpose (safest when a reply has both).
 - **`sender.py`** — delivery seam. v1 only builds `mailto:` links (manual send). This is the
   designated insertion point for v2 SMTP/Playwright auto-send; keep routes calling through it.
+- **Exposure scan pipeline** (`scanner.py` → `fetcher.py` → `extract.py` → `matcher.py` →
+  `scan_service.py`/`ratelimit.py`) — checks whether a broker actually lists the profile, as
+  opposed to `templater.py`'s "send them a removal request regardless." **`scanner.py`** only
+  builds search URLs (`search_context`/`build_search_url`) — the manual "open search" link and
+  the pipeline's fetch URL both go through it. `build_search_url` returns **None** if the profile
+  can't fill a placeholder the template needs (e.g. a `{city}` template, no known city); `scan_service`
+  maps that to `unreachable` "profile missing city" rather than fetching a garbage nationwide page.
+  `page_scope` marks templates with no `{city}`/`{state}` as `unscoped`, which the snapshot records so
+  a page-1 `not_found` on a paginated nationwide broker is shown as weak evidence. **`fetcher.py`** is
+  the Playwright seam (persistent browser context in gitignored `.browser/`); it's the only module that
+  touches the network, so everything above it is tested against canned HTML. `looks_like_challenge`
+  checks **visible text only** (title + body, scripts stripped) — a results page routinely embeds an
+  invisible reCAPTCHA iframe and the Cloudflare beacon, which would otherwise read as a bot wall.
+  `SCRUBBR_DUMP_HTML=1` saves every rendered page to gitignored `.scans/` for `scripts.verify_scan`.
+  **`extract.py`** turns result-page HTML into `CandidateListing`s via per-broker CSS selectors
+  (`Broker.scan_config`, sourced from `data/brokers.json`'s `scan` key), with a generic name-adjacent
+  regex fallback; a page with no candidates and no "no results" marker is `PARSE_FAILED`, never a silent
+  not-found. The "no results" marker check also runs on **visible text only** (result pages ship JSON
+  state blobs with fallback "no matches" copy). `parse_age` yields an exact age *or* an `age_range` for
+  bucketed formats ("70s" → [70,79], "65+" → [65,120]); `_name_text` strips a nested age element out of
+  the name (sites render `<h2>Name<span>Age 55</span></h2>`). **`matcher.py`** scores a candidate against
+  the `Profile` (name gate, then age/location/state/alias/phone signals) — `found` needs ≥2 matched
+  signals *and* ≥60% score, so a same-name/same-age stranger caps out at `possible`, never `found`. The
+  age signal tests `±1` for an exact age and containment for an `age_range`. **`scan_service.scan_and_persist`**
+  is what routes call: it checks for a prior *manual* verdict (never overwritten by an auto scan) before
+  touching the network, then persists via `db.set_exposure` including a JSON `snapshot` of the matched
+  listing. `scan.skip: true` (a live search page behind a JS wizard / empty shell / bot wall) is treated
+  as non-scannable — `unreachable`, manual link only, without ever fetching (`is_skipped`/`is_auto_scannable`).
+  **`ratelimit.py`** enforces global concurrency=1 and jittered per-domain spacing, and persists a
+  cooldown after a 429/503 in the `scan_cooldowns` table. Exposure states: `unknown` (searchable,
+  never scanned) → `found` / `not_found` / `possible` (low-confidence, user confirms/dismisses) /
+  `unreachable` (blocked/timeout/parse failure, manual link is the fallback); `assumed` (no public
+  search) and `likely` (a same-`network` sibling was `found`) are both **derived, never stored**.
+  `models.effective_exposure` precedence: own verdict (manual or auto) > network-derived `likely` >
+  `unknown`/`assumed`; `found_networks` only seeds `likely` from a **stored** `found`, so a `likely`
+  never cascades and a `possible` never promotes siblings. **Network inference** (`Broker.network`,
+  from `brokers.json`): `peopleconnect` (7), `whitepages` (2), `beenverified` (2), `tps-family` (5,
+  heuristic). `scan_one_per_network` config flag makes a bulk sweep scan one sibling per network and
+  let the rest inherit `likely`. **Drift monitor** (`exposures.fail_streak`, bumped on each consecutive
+  `unreachable`, reset otherwise): `db.drifting_brokers` surfaces a "configs needing attention" list on
+  the scan page (excluding `scan.skip` brokers, which are unreachable by design).
+  **Only brokers with a `search_url` in `data/brokers.json` are scan-eligible at all**, and only those
+  without `scan.skip` are *auto*-scannable — currently 8 verified auto-scannable configs (the five
+  selector-based ones Whitepages/Radaris/FastPeopleSearch/TruePeopleSearch/That'sThem plus the three
+  verified live 2026-07-09: Advanced Background Checks, USPhonebook, AnyWho). `scan.skip: true` marks a
+  broker whose live search can't be driven by a plain GET from a residential IP (Spokeo/Nuwber wizards,
+  411.com's client-rendered "NaN people found" shell, and several Cloudflare-walled sites —
+  PeopleFinders/SearchPeopleFree/FamilyTreeNow/VoterRecords/Clustrmaps); `verified: false` means the
+  selectors haven't been confirmed against a live page yet. A broker having a real public search in the
+  wild (e.g. CheckPeople) doesn't make it scannable in-app — it stays in the "assumed"/"not publicly
+  searchable" bucket until someone adds its `search_url`/`scan` config and verifies it. Growing this list
+  is manual, broker-by-broker work: `python -m scripts.verify_scan "<broker>" [--fixture]` runs a live
+  scan (reading the real profile from gitignored `scan_profile.toml`), prints extraction + match, and
+  `--fixture` writes a PII-scrubbed fixture. Committed fixtures are **synthetic** ("Jane Public"), never
+  raw dumps — raw pages carry the profile's and third parties' real data. Requires `playwright install
+  chromium` once (see README); each live scan takes ~10-25s (browser launch + rate-limit delay).
 
 ## Conventions specific to this repo
 

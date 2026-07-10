@@ -1,0 +1,194 @@
+{% extends "base.html" %}
+{% block title %}Scan &middot; Scrubbr{% endblock %}
+{% block body %}
+<h1>Exposure scan</h1>
+<p class="muted">Checks each broker's public search page for {{ profile.full_name or profile.name }} from a local
+browser session, then scores any listing against your profile &mdash; not just "the name appears on the page."
+Requests go straight from this machine to the broker, at a slow, human-like pace.</p>
+
+{% if multi_profile %}
+<form class="filters" method="get" action="/scan">
+    <label>Profile
+        <select name="profile_id" onchange="this.form.submit()">
+            {% for p in profiles %}
+            <option value="{{ p.id }}" {% if p.id == profile.id %}selected{% endif %}>{{ p.name }}</option>
+            {% endfor %}
+        </select>
+    </label>
+    <noscript><button type="submit">Go</button></noscript>
+</form>
+{% endif %}
+
+{% if not ctx_ready %}
+<div class="banner warn">
+    <a href="/profiles/{{ profile.id }}/edit">{{ profile.name }}'s profile</a> needs at least a first
+    and last name before scanning.
+</div>
+{% else %}
+
+<section>
+    <h2>Auto-scan</h2>
+    <p class="muted">Sites that block automated checks show as "Couldn't check," with a manual link as the fallback.
+    Low-confidence matches show as "Possible match" for you to confirm or dismiss.</p>
+    <div class="actions">
+        <form method="post" action="/scan/all">
+            <input type="hidden" name="profile_id" value="{{ profile.id }}">
+            <button type="submit" {% if bulk and bulk.running %}disabled{% endif %}>Scan all</button>
+        </form>
+        <span class="muted" id="scan-progress">
+            {% if bulk and bulk.running %}Scanning {{ bulk.done }} of {{ bulk.total }}&hellip;{% endif %}
+        </span>
+    </div>
+    <table>
+        <thead><tr><th>Broker</th><th>Exposure</th><th></th></tr></thead>
+        <tbody>
+        {% for row in searchable %}
+            <tr>
+                <td><a href="/broker/{{ row.broker.id }}?profile_id={{ profile.id }}">{{ row.broker.name }}</a></td>
+                <td>
+                    <span class="badge e-{{ row.status }}" id="exp-{{ row.broker.id }}">{{ EXPOSURE_LABELS[row.status] }}</span>
+                    {% if row.status == 'likely' %}<span class="muted" style="font-size: 0.8rem"> &middot; {{ row.likely_via }} network</span>
+                    {% elif row.source == 'manual' %}<span class="muted" style="font-size: 0.8rem"> &middot; manually set</span>{% endif %}
+                </td>
+                <td>
+                    {% if not row.manual_only %}
+                    <form method="post" action="/scan/{{ row.broker.id }}/auto">
+                        <input type="hidden" name="profile_id" value="{{ profile.id }}">
+                        <button type="submit" {% if bulk and bulk.running %}disabled{% endif %}>
+                            {{ 'Re-scan' if row.status not in ('unknown', 'likely') else 'Scan' }}
+                        </button>
+                    </form>
+                    {% endif %}
+                    {% if row.link %}<a href="{{ row.link }}" target="_blank" rel="noopener">Open search</a>{% endif %}
+                </td>
+            </tr>
+            {% if row.manual_only %}
+            <tr>
+                <td colspan="3">
+                    <div class="snapshot muted">
+                        This broker's search can't be driven automatically (see its scan notes).
+                        {% if row.link %}<a href="{{ row.link }}" target="_blank" rel="noopener">Run the search yourself</a>{% endif %}
+                    </div>
+                </td>
+            </tr>
+            {% elif row.status in ('found', 'possible') and row.snapshot %}
+            <tr>
+                <td colspan="3">
+                    <div class="snapshot">
+                        <strong>{{ row.snapshot.name }}</strong>
+                        {% if row.snapshot.age is not none %}&middot; age {{ row.snapshot.age }}
+                        {% elif row.snapshot.age_range %}&middot; age {{ row.snapshot.age_range[0] }}&ndash;{{ row.snapshot.age_range[1] }}{% endif %}
+                        &middot; score {{ (row.snapshot.score * 100) | round | int }}%
+                        {% if row.snapshot.source_url %}&middot; <a href="{{ row.snapshot.source_url }}" target="_blank" rel="noopener">view listing</a>{% endif %}
+                        <dl>
+                            {% if row.snapshot.locations %}<dt>Locations</dt><dd>{{ row.snapshot.locations | join(', ') }}</dd>{% endif %}
+                            {% if row.snapshot.relatives %}<dt>Relatives</dt><dd>{{ row.snapshot.relatives | join(', ') }}</dd>{% endif %}
+                        </dl>
+                        <div class="signals">
+                        {% for name, value in row.snapshot.signals.items() %}
+                            <span class="signal {{ 'yes' if value == true else ('no' if value == false else 'na') }}">
+                                {{ name }}: {{ '✓' if value == true else ('✗' if value == false else '—') }}
+                            </span>
+                        {% endfor %}
+                        </div>
+                        {% if row.status == 'possible' %}
+                        <div class="mark-row">
+                            <form method="post" action="/scan/{{ row.broker.id }}/mark">
+                                <input type="hidden" name="profile_id" value="{{ profile.id }}">
+                                <input type="hidden" name="status" value="found">
+                                <button type="submit">This is me</button>
+                            </form>
+                            <form method="post" action="/scan/{{ row.broker.id }}/mark">
+                                <input type="hidden" name="profile_id" value="{{ profile.id }}">
+                                <input type="hidden" name="status" value="not_found">
+                                <button type="submit">Not me</button>
+                            </form>
+                        </div>
+                        {% endif %}
+                    </div>
+                </td>
+            </tr>
+            {% elif row.status == 'unreachable' %}
+            <tr>
+                <td colspan="3">
+                    <div class="snapshot muted">
+                        {{ row.reason or "Couldn't complete the check." }}
+                        {% if row.link %} &mdash; <a href="{{ row.link }}" target="_blank" rel="noopener">check manually</a>{% endif %}
+                    </div>
+                </td>
+            </tr>
+            {% elif row.status == 'not_found' and row.weak %}
+            <tr>
+                <td colspan="3">
+                    <div class="snapshot muted">
+                        Weak result &mdash; this broker's search isn't scoped to your city or state, so only the
+                        first page of nationwide results was checked.
+                        {% if row.link %}<a href="{{ row.link }}" target="_blank" rel="noopener">Check further pages</a>{% endif %}
+                    </div>
+                </td>
+            </tr>
+            {% endif %}
+        {% endfor %}
+        </tbody>
+    </table>
+</section>
+{% endif %}
+
+{% if drifting %}
+<section>
+    <h2>Configs needing attention</h2>
+    <p class="muted">These brokers keep coming back unreachable. Either their markup drifted out from under the
+    saved selectors, or the site is gone &mdash; check with <code>python -m scripts.verify_scan "&lt;broker&gt;"</code>.</p>
+    <ul class="due">
+    {% for broker, streak, reason in drifting %}
+        <li><a href="/broker/{{ broker.id }}?profile_id={{ profile.id }}">{{ broker.name }}</a>
+            <span class="muted">{{ streak }} failed scans in a row{% if reason %} &middot; {{ reason }}{% endif %}</span></li>
+    {% endfor %}
+    </ul>
+</section>
+{% endif %}
+
+<section>
+    <h2>Not publicly searchable</h2>
+    <p class="muted">These brokers have no public search page, so there is no way to verify a listing
+    &mdash; they stay active and should still receive removal requests.</p>
+    <ul class="due">
+    {% for b in assumed %}
+        <li><a href="/broker/{{ b.id }}?profile_id={{ profile.id }}">{{ b.name }}</a>
+            <span class="muted">{{ b.category }}</span></li>
+    {% endfor %}
+    </ul>
+</section>
+
+{% if bulk and bulk.running %}
+<script>
+const LABELS = {
+    found: 'Found', not_found: 'Not found', possible: 'Possible match — review',
+    unreachable: "Couldn't check", unknown: 'Unknown', likely: 'Likely exposed',
+};
+
+function pollBulkScan() {
+    fetch('/scan/status?profile_id={{ profile.id }}').then(r => r.json()).then(state => {
+        const progress = document.getElementById('scan-progress');
+        if (state.total > 0) {
+            progress.textContent = `Scanning ${state.done} of ${state.total}…`;
+        }
+        for (const [brokerId, result] of Object.entries(state.results || {})) {
+            const badge = document.getElementById('exp-' + brokerId);
+            if (badge) {
+                badge.className = 'badge e-' + result.status;
+                badge.textContent = LABELS[result.status] || result.status;
+            }
+        }
+        if (state.running) {
+            setTimeout(pollBulkScan, 3000);
+        } else {
+            progress.textContent = 'Scan complete — reloading…';
+            setTimeout(() => location.reload(), 800);
+        }
+    });
+}
+pollBulkScan();
+</script>
+{% endif %}
+{% endblock %}

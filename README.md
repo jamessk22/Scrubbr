@@ -32,12 +32,29 @@ never leaves your computer.
   or deletes.
 - **Recurrence** — sent requests get a follow-up date (60 days people-search,
   90 otherwise) surfaced on the dashboard when due.
+- **Exposure scanning** — a local Playwright browser session checks a
+  broker's public search page for your profile and scores any listing
+  against it (name, age, location, alias, phone), never on a bare
+  name-appears-on-page match. Four outcomes: **found** / **not found** /
+  **possible match** (low-confidence, you confirm or dismiss) / **couldn't
+  check** (blocked/timeout, falls back to a manual search link). Go to the
+  **Scan** page and click **Scan** (single broker) or **Scan all**; each
+  scan launches a real browser and is rate-limited, so expect ~10-25s per
+  broker, more for a bulk run.
+  **Only 5 of the 65 brokers are currently wired up for this** — Whitepages,
+  Radaris, FastPeopleSearch, TruePeopleSearch, That'sThem — because each one
+  needs real CSS selectors hand-verified against its live results page
+  (`scan` key in `data/brokers.json`). Every other broker, even ones that do
+  have a public search in reality (e.g. CheckPeople), shows up under "Not
+  publicly searchable" until someone adds a `scan` config for it — that's
+  manual coverage growth, not something scanning unlocks automatically.
 
 ## Setup
 
 ```sh
 python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt
+.venv/bin/playwright install chromium         # one-time, for exposure scanning
 .venv/bin/python -m scripts.seed_brokers      # load broker registry
 .venv/bin/uvicorn app.main:app --port 8137    # http://127.0.0.1:8137
 ```
@@ -58,13 +75,16 @@ intact. Click **Check inbox** on the dashboard to poll.
 .venv/bin/python -m pytest
 ```
 
-Covers template rendering, status transitions / follow-up dates, and reply
-classification.
+Covers template rendering, status transitions / follow-up dates, reply
+classification, and the scan pipeline (match scoring, HTML extraction, rate
+limiting, outcome persistence) — all against saved HTML fixtures, no live
+network calls.
 
 ## Project layout
 
 ```
 app/       main.py (routes) · db.py · models.py · templater.py · inbox.py · sender.py
+           scanner.py · fetcher.py · extract.py · matcher.py · ratelimit.py · scan_service.py
            templates/ (HTML) · static/style.css
 data/      brokers.json · request_templates/ (ccpa/gdpr/generic + _identity)
 scripts/   seed_brokers.py
@@ -77,6 +97,12 @@ tests/
   process before relying on it; update `data/brokers.json` and re-seed.
 - Some brokers require phone/ID verification or re-list data quickly (flagged by
   the `difficulty` field and notes) — those need manual follow-up.
+- **Address format matters for scanning.** `scanner.search_context()` extracts the
+  city from the *first line* of `profile.addresses` by splitting on the last comma
+  and assumes `"street, city state zip"` (one comma before the city). An address
+  written `"street, city, state zip"` (two commas, e.g. `"10 Beacon St, Boston,
+  MA 02108"`) yields an empty city and breaks the search URL. Known bug,
+  not yet fixed — format addresses as one comma before city/state/zip to avoid it.
 - This is a personal tool, not legal advice.
 
 ## v2 roadmap
