@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_exposure.html" import exposure_badge %}
 {% block title %}Dashboard &middot; Scrubbr{% endblock %}
 {% block body %}
 <h1>Dashboard</h1>
@@ -75,7 +76,8 @@
                 <td><a href="/broker/{{ broker.id }}?profile_id={{ profile.id }}">{{ broker.name }}</a></td>
                 {% if multi_profile %}<td class="muted">{{ profile.name }}</td>{% endif %}
                 <td class="muted">{{ broker.category }}</td>
-                <td><span class="badge e-{{ exposure }}">{{ EXPOSURE_LABELS[exposure] }}</span></td>
+                <td>{{ exposure_badge(exposure, broker.id, profile.id,
+                                       "/?profile_id=" ~ selected_profile ~ ("&show_all=1" if show_all else "")) }}</td>
                 <td><span class="badge s-{{ r.status }}">{{ STATUS_LABELS[r.status] }}</span></td>
                 <td class="muted">{{ r.next_due or "&mdash;" | safe }}</td>
             </tr>

@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_exposure.html" import exposure_badge %}
 {% block title %}Scan &middot; Scrubbr{% endblock %}
 {% block body %}
 <h1>Exposure scan</h1>
@@ -46,9 +47,8 @@ Requests go straight from this machine to the broker, at a slow, human-like pace
             <tr>
                 <td><a href="/broker/{{ row.broker.id }}?profile_id={{ profile.id }}">{{ row.broker.name }}</a></td>
                 <td>
-                    <span class="badge e-{{ row.status }}" id="exp-{{ row.broker.id }}">{{ EXPOSURE_LABELS[row.status] }}</span>
-                    {% if row.status == 'likely' %}<span class="muted" style="font-size: 0.8rem"> &middot; {{ row.likely_via }} network</span>
-                    {% elif row.source == 'manual' %}<span class="muted" style="font-size: 0.8rem"> &middot; manually set</span>{% endif %}
+                    {{ exposure_badge(row.status, row.broker.id, profile.id, "/scan?profile_id=" ~ profile.id,
+                                       source=row.source, likely_via=row.likely_via, elem_id="exp-" ~ row.broker.id) }}
                 </td>
                 <td>
                     {% if not row.manual_only %}
@@ -91,20 +91,6 @@ Requests go straight from this machine to the broker, at a slow, human-like pace
                             </span>
                         {% endfor %}
                         </div>
-                        {% if row.status == 'possible' %}
-                        <div class="mark-row">
-                            <form method="post" action="/scan/{{ row.broker.id }}/mark">
-                                <input type="hidden" name="profile_id" value="{{ profile.id }}">
-                                <input type="hidden" name="status" value="found">
-                                <button type="submit">This is me</button>
-                            </form>
-                            <form method="post" action="/scan/{{ row.broker.id }}/mark">
-                                <input type="hidden" name="profile_id" value="{{ profile.id }}">
-                                <input type="hidden" name="status" value="not_found">
-                                <button type="submit">Not me</button>
-                            </form>
-                        </div>
-                        {% endif %}
                     </div>
                 </td>
             </tr>

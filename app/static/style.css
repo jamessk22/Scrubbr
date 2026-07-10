@@ -180,6 +180,7 @@ tbody tr:hover {
   border-radius: 999px;
   font-size: 0.8rem;
   font-weight: 600;
+  white-space: nowrap;
 }
 
 .s-not_started {
@@ -292,6 +293,28 @@ tbody tr:hover {
 .mark-row {
   margin: 10px 0;
   flex-wrap: wrap;
+}
+
+.exposure-toggle {
+  display: inline-block;
+}
+
+.exposure-toggle summary {
+  display: inline-block;
+  cursor: pointer;
+  list-style: none;
+}
+
+.exposure-toggle summary::-webkit-details-marker {
+  display: none;
+}
+
+.exposure-toggle summary:hover {
+  filter: brightness(1.2);
+}
+
+.exposure-toggle .mark-row {
+  margin: 8px 0 0;
 }
 
 .banner {

@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_exposure.html" import exposure_badge %}
 {% block title %}{{ broker.name }} &middot; Scrubbr{% endblock %}
 {% block body %}
 <p><a href="/brokers">&larr; All brokers</a></p>
@@ -36,23 +37,11 @@
 <section class="profile-entry">
     <h2>{% if multi_profile %}{{ e.profile.name }} &middot; {% endif %}Removal request
         <span class="badge s-{{ e.req.status }}">{{ STATUS_LABELS[e.req.status] }}</span>
-        <span class="badge e-{{ e.exposure }}">{{ EXPOSURE_LABELS[e.exposure] }}</span></h2>
+        {{ exposure_badge(e.exposure, broker.id, e.profile.id, "/broker/" ~ broker.id ~ "?profile_id=" ~ e.profile.id) }}</h2>
 
     {% if e.search_link %}
     <div class="mark-row">
         <a href="{{ e.search_link }}" target="_blank" rel="noopener">Check listing</a>
-        <form method="post" action="/scan/{{ broker.id }}/mark">
-            <input type="hidden" name="profile_id" value="{{ e.profile.id }}">
-            <input type="hidden" name="status" value="found">
-            <input type="hidden" name="back" value="/broker/{{ broker.id }}?profile_id={{ e.profile.id }}">
-            <button type="submit">Found</button>
-        </form>
-        <form method="post" action="/scan/{{ broker.id }}/mark">
-            <input type="hidden" name="profile_id" value="{{ e.profile.id }}">
-            <input type="hidden" name="status" value="not_found">
-            <input type="hidden" name="back" value="/broker/{{ broker.id }}?profile_id={{ e.profile.id }}">
-            <button type="submit">Not found</button>
-        </form>
     </div>
     {% endif %}
 

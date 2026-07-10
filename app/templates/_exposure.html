@@ -1,0 +1,21 @@
+{% macro exposure_badge(status, broker_id, profile_id, back, source='', likely_via='', elem_id='') %}
+<details class="exposure-toggle">
+    <summary class="badge e-{{ status }}"{% if elem_id %} id="{{ elem_id }}"{% endif %}>{{ EXPOSURE_LABELS[status] }}</summary>
+    <div class="mark-row">
+        <form method="post" action="/scan/{{ broker_id }}/mark">
+            <input type="hidden" name="profile_id" value="{{ profile_id }}">
+            <input type="hidden" name="status" value="found">
+            <input type="hidden" name="back" value="{{ back }}">
+            <button type="submit">Mark found</button>
+        </form>
+        <form method="post" action="/scan/{{ broker_id }}/mark">
+            <input type="hidden" name="profile_id" value="{{ profile_id }}">
+            <input type="hidden" name="status" value="not_found">
+            <input type="hidden" name="back" value="{{ back }}">
+            <button type="submit">Mark not found</button>
+        </form>
+    </div>
+</details>
+{%- if status == 'likely' %}<span class="muted" style="font-size: 0.8rem"> &middot; {{ likely_via }} network</span>
+{%- elif source == 'manual' %}<span class="muted" style="font-size: 0.8rem"> &middot; manually set</span>{% endif %}
+{% endmacro %}
