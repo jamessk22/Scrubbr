@@ -56,7 +56,7 @@ python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt
 .venv/bin/playwright install chromium         # one-time, for exposure scanning
 .venv/bin/python -m scripts.seed_brokers      # load broker registry
-.venv/bin/uvicorn app.main:app --port 8137    # http://127.0.0.1:8137
+.venv/bin/uvicorn app.main:app --port 3000    # http://127.0.0.1:3000
 ```
 
 Then open the dashboard, fill in your **Profile**, and work through the brokers.
