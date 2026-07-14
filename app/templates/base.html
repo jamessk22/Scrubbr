@@ -24,5 +24,14 @@
     <p>Runs entirely on your machine. Requests carry legal weight because you are
     the data subject &mdash; no authorized-agent paperwork needed.</p>
 </footer>
+<script>
+// `toggle` doesn't bubble, so listen on the capture phase.
+document.addEventListener("toggle", (e) => {
+    if (!e.target.open || !e.target.classList.contains("badge-toggle")) return;
+    document.querySelectorAll("details.badge-toggle[open]").forEach((d) => {
+        if (d !== e.target) d.open = false;
+    });
+}, true);
+</script>
 </body>
 </html>
