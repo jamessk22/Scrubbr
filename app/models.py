@@ -40,7 +40,7 @@ EXPOSURE_FOUND = "found"
 EXPOSURE_NOT_FOUND = "not_found"
 EXPOSURE_POSSIBLE = "possible"  # low-probability match; user confirms or dismisses
 EXPOSURE_UNREACHABLE = "unreachable"  # blocked/timeout/parse failure; manual link is the fallback
-EXPOSURE_ASSUMED = "assumed"  # derived, never stored: unsearchable broker with no verdict
+EXPOSURE_ASSUMED = "assumed"  # unsearchable broker: derived when no verdict is stored, or set by hand
 EXPOSURE_LIKELY = "likely"  # derived, never stored: a same-network sibling was found
 AUTO_EXPOSURE_STATUSES = {EXPOSURE_FOUND, EXPOSURE_NOT_FOUND, EXPOSURE_POSSIBLE, EXPOSURE_UNREACHABLE}
 

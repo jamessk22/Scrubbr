@@ -371,6 +371,14 @@ def set_exposure(
     conn.commit()
 
 
+def clear_exposure(conn: sqlite3.Connection, broker_id: int, profile_id: int) -> None:
+    """Drop the stored verdict so the broker falls back to its derived state."""
+    conn.execute(
+        "DELETE FROM exposures WHERE broker_id = ? AND profile_id = ?", (broker_id, profile_id)
+    )
+    conn.commit()
+
+
 def drifting_brokers(conn: sqlite3.Connection, min_streak: int) -> list[tuple[Broker, int, str]]:
     """(broker, streak, last_reason) for brokers whose scans keep coming back
     `unreachable` for some profile -- selector rot and dead domains surface here

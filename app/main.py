@@ -37,6 +37,14 @@ app = FastAPI(title="Scrubbr")
 app.mount("/static", StaticFiles(directory=str(ROOT / "app" / "static")), name="static")
 views = Jinja2Templates(directory=str(ROOT / "app" / "templates"))
 
+def asset_version() -> str:
+    """Cache-bust the stylesheet: StaticFiles sends no Cache-Control, so without
+    this the browser happily serves a stale style.css across server restarts."""
+    return str(int((ROOT / "app" / "static" / "style.css").stat().st_mtime))
+
+
+views.env.globals["asset_version"] = asset_version
+
 STATUS_LABELS = {
     STATUS_NOT_STARTED: "Not started",
     STATUS_SENT: "Sent",
@@ -56,6 +64,20 @@ EXPOSURE_LABELS = {
     EXPOSURE_LIKELY: "Likely exposed",
 }
 views.env.globals["EXPOSURE_LABELS"] = EXPOSURE_LABELS
+
+# Verdicts a user can set by hand, in menu order. `unknown` clears the stored row
+# instead of writing one; `possible`/`unreachable` are scan outcomes and `likely` is
+# network-derived, so none of them are settable -- only displayable as the current value.
+EXPOSURE_CHOICES = [
+    EXPOSURE_FOUND, EXPOSURE_ASSUMED, EXPOSURE_NOT_FOUND, EXPOSURE_UNKNOWN,
+]
+views.env.globals["EXPOSURE_CHOICES"] = EXPOSURE_CHOICES
+
+# Auto-scan rows are grouped by outcome, worst-first, rather than listed alphabetically.
+SCAN_GROUP_ORDER = [
+    EXPOSURE_FOUND, EXPOSURE_POSSIBLE, EXPOSURE_LIKELY, EXPOSURE_ASSUMED,
+    EXPOSURE_UNREACHABLE, EXPOSURE_UNKNOWN, EXPOSURE_NOT_FOUND,
+]
 
 
 def get_conn():
@@ -188,7 +210,6 @@ def broker_detail(request: HttpRequest, broker_id: int, profile_id: str = ""):
         return views.TemplateResponse("broker_detail.html", {
             "request": request, "broker": broker, "entries": entries,
             "is_form": broker.contact_method == CONTACT_FORM,
-            "statuses": STATUS_LABELS,
             "profiles": profiles, "selected_profile": selected, "multi_profile": len(profiles) > 1,
         })
     finally:
@@ -196,13 +217,14 @@ def broker_detail(request: HttpRequest, broker_id: int, profile_id: str = ""):
 
 
 @app.post("/broker/{broker_id}/status")
-def update_status(broker_id: int, profile_id: int = Form(...), status: str = Form(...), note: str = Form("")):
+def update_status(broker_id: int, profile_id: int = Form(...), status: str = Form(...), back: str = Form("")):
     conn = get_conn()
     try:
         req = db.get_or_create_request(conn, broker_id, profile_id)
         if status in STATUS_LABELS:
-            db.set_status(conn, req.id, status, note=note)
-        return RedirectResponse(f"/broker/{broker_id}?profile_id={profile_id}", status_code=303)
+            db.set_status(conn, req.id, status)
+        target = _safe_redirect_target(back, f"/broker/{broker_id}?profile_id={profile_id}")
+        return RedirectResponse(target, status_code=303)
     finally:
         conn.close()
 
@@ -280,7 +302,21 @@ def scan_page(request: HttpRequest, profile_id: str = ""):
                 "likely_via": networks.get(b.network, ""),
                 "weak": bool(snapshot) and snapshot.get("page_scope") == scanner.SCOPE_UNSCOPED,
             })
-        assumed = [b for b in brokers if not b.search_url]
+        searchable.sort(key=lambda row: row["broker"].name.lower())
+        groups = [
+            (status, [row for row in searchable if row["status"] == status])
+            for status in SCAN_GROUP_ORDER
+        ]
+        groups = [(status, rows) for status, rows in groups if rows]
+        assumed = [
+            {
+                "broker": b,
+                "status": effective_exposure(b, exposures.get(b.id), networks),
+                "source": exposures[b.id].source if b.id in exposures else "",
+                "likely_via": networks.get(b.network, ""),
+            }
+            for b in brokers if not b.search_url
+        ]
         drifting = [
             (b, streak, reason) for b, streak, reason in db.drifting_brokers(conn, DRIFT_STREAK_THRESHOLD)
             if not scan_service.is_skipped(b)
@@ -288,7 +324,7 @@ def scan_page(request: HttpRequest, profile_id: str = ""):
         return views.TemplateResponse("scan.html", {
             "request": request, "profile": profile, "profiles": profiles,
             "multi_profile": len(profiles) > 1,
-            "searchable": searchable, "assumed": assumed, "ctx_ready": ctx is not None,
+            "groups": groups, "assumed": assumed, "ctx_ready": ctx is not None,
             "bulk": _bulk_scans.get(profile.id), "drifting": drifting,
         })
     finally:
@@ -358,7 +394,9 @@ def _safe_redirect_target(back: str, default: str) -> str:
 def scan_mark(broker_id: int, profile_id: int = Form(...), status: str = Form(...), back: str = Form("")):
     conn = get_conn()
     try:
-        if status in (EXPOSURE_FOUND, EXPOSURE_NOT_FOUND):
+        if status == EXPOSURE_UNKNOWN:
+            db.clear_exposure(conn, broker_id, profile_id)
+        elif status in EXPOSURE_CHOICES:
             db.set_exposure(conn, broker_id, profile_id, status, "manual")
         target = _safe_redirect_target(back, f"/scan?profile_id={profile_id}")
         return RedirectResponse(target, status_code=303)

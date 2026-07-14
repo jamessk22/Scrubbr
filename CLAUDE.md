@@ -72,9 +72,15 @@ framework. `app/main.py` holds every route; the rest of `app/` is a thin layered
   ever fetching. **`ratelimit.py`** enforces global concurrency=1 and jittered per-domain spacing,
   with a persisted cooldown after a 429/503. Exposure states: `unknown` (never scanned) → `found` /
   `not_found` / `possible` (low-confidence, user confirms/dismisses) / `unreachable` (blocked/timeout/
-  parse failure); `assumed` (no public search) and `likely` (a same-`network` sibling was `found`)
-  are both **derived, never stored** — `likely` never cascades and `possible` never promotes siblings
+  parse failure); `assumed` (no public search) is **derived when nothing is stored**, but is also one of
+  the verdicts a user can set by hand (`main.EXPOSURE_CHOICES`, written with `source: manual`); `likely`
+  (a same-`network` sibling was `found`) is **derived, never stored** — `likely` never cascades and
+  `possible` never promotes siblings
   (`models.effective_exposure` precedence: own verdict > network-derived `likely` > `unknown`/`assumed`).
+  Every badge in the UI is a dropdown of pill-styled options (`templates/_badges.html`): exposure posts to
+  `/scan/{id}/mark` (picking `unknown` calls `db.clear_exposure`, deleting the row so the derived state
+  returns), status posts to `/broker/{id}/status`. Both carry a `back` field so the badge redirects to the
+  page it was clicked from — validate it through `_safe_redirect_target`, never trust it raw.
   **Drift monitor**: `exposures.fail_streak` bumps on consecutive `unreachable`; `db.drifting_brokers`
   surfaces a "needs attention" list (excluding `scan.skip` brokers).
   **Only brokers with a `search_url` in `data/brokers.json` are scan-eligible**, and only those without

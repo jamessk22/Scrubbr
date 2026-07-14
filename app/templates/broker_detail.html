@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_exposure.html" import exposure_badge with context %}
+{% from "_badges.html" import exposure_badge, status_badge with context %}
 {% block title %}{{ broker.name }} &middot; Scrubbr{% endblock %}
 {% block body %}
 <p><a href="/brokers">&larr; All brokers</a></p>
@@ -36,7 +36,7 @@
 {% for e in entries %}
 <section class="profile-entry">
     <h2>{% if multi_profile %}{{ e.profile.name }} &middot; {% endif %}Removal request
-        <span class="badge s-{{ e.req.status }}">{{ STATUS_LABELS[e.req.status] }}</span>
+        {{ status_badge(e.req.status, broker.id, e.profile.id) }}
         {{ exposure_badge(e.exposure, broker.id, e.profile.id) }}</h2>
 
     {% if e.search_link %}
@@ -46,18 +46,8 @@
     {% endif %}
 
     <div class="grid">
+        {% if e.req.sent_at or e.req.history %}
         <div>
-            <h3>Update status</h3>
-            <form method="post" action="/broker/{{ broker.id }}/status" class="statusform">
-                <input type="hidden" name="profile_id" value="{{ e.profile.id }}">
-                <select name="status">
-                    {% for key, label in statuses.items() %}
-                    <option value="{{ key }}" {% if key == e.req.status %}selected{% endif %}>{{ label }}</option>
-                    {% endfor %}
-                </select>
-                <input type="text" name="note" placeholder="optional note">
-                <button type="submit">Save</button>
-            </form>
             {% if e.req.sent_at %}<p class="muted">Last sent {{ e.req.sent_at }}{% if e.req.next_due %} &middot; next due {{ e.req.next_due }}{% endif %}</p>{% endif %}
             {% if e.req.history %}
             <h3>History</h3>
@@ -69,6 +59,7 @@
             </ul>
             {% endif %}
         </div>
+        {% endif %}
 
         <div>
             {% if not e.profile_ready %}

@@ -1,0 +1,33 @@
+{% macro _back() %}{{ request.url.path }}{{ '?' ~ request.url.query if request.url.query else '' }}{% endmacro %}
+
+{% macro exposure_badge(status, broker_id, profile_id, source='', likely_via='') %}
+<details class="badge-toggle">
+    <summary class="badge e-{{ status }}" id="exp-{{ broker_id }}-{{ profile_id }}">{{ EXPOSURE_LABELS[status] }}</summary>
+    <form class="badge-menu" method="post" action="/scan/{{ broker_id }}/mark">
+        <input type="hidden" name="profile_id" value="{{ profile_id }}">
+        <input type="hidden" name="back" value="{{ _back() }}">
+        <span class="badge e-{{ status }} current">{{ EXPOSURE_LABELS[status] }}</span>
+        <hr>
+        {% for key in EXPOSURE_CHOICES if key != status %}
+        <button class="badge e-{{ key }}" type="submit" name="status" value="{{ key }}">{{ EXPOSURE_LABELS[key] }}</button>
+        {% endfor %}
+    </form>
+</details>
+{%- if status == 'likely' %}<span class="muted exposure-note"> &middot; {{ likely_via }} network</span>
+{%- elif source == 'manual' %}<span class="muted exposure-note"> &middot; manually set</span>{% endif %}
+{% endmacro %}
+
+{% macro status_badge(status, broker_id, profile_id) %}
+<details class="badge-toggle">
+    <summary class="badge s-{{ status }}">{{ STATUS_LABELS[status] }}</summary>
+    <form class="badge-menu" method="post" action="/broker/{{ broker_id }}/status">
+        <input type="hidden" name="profile_id" value="{{ profile_id }}">
+        <input type="hidden" name="back" value="{{ _back() }}">
+        <span class="badge s-{{ status }} current">{{ STATUS_LABELS[status] }}</span>
+        <hr>
+        {% for key, label in STATUS_LABELS.items() if key != status %}
+        <button class="badge s-{{ key }}" type="submit" name="status" value="{{ key }}">{{ label }}</button>
+        {% endfor %}
+    </form>
+</details>
+{% endmacro %}

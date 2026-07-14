@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_exposure.html" import exposure_badge with context %}
+{% from "_badges.html" import exposure_badge, status_badge with context %}
 {% block title %}Dashboard &middot; Scrubbr{% endblock %}
 {% block body %}
 <h1>Dashboard</h1>
@@ -77,7 +77,7 @@
                 {% if multi_profile %}<td class="muted">{{ profile.name }}</td>{% endif %}
                 <td class="muted">{{ broker.category }}</td>
                 <td>{{ exposure_badge(exposure, broker.id, profile.id) }}</td>
-                <td><span class="badge s-{{ r.status }}">{{ STATUS_LABELS[r.status] }}</span></td>
+                <td>{{ status_badge(r.status, broker.id, profile.id) }}</td>
                 <td class="muted">{{ r.next_due or "&mdash;" | safe }}</td>
             </tr>
         {% endfor %}
