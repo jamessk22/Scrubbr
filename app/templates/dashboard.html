@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% from "_badges.html" import exposure_badge, status_badge with context %}
+{% from "_sort.html" import sort_th with context %}
 {% block title %}Dashboard &middot; Scrubbr{% endblock %}
 {% block body %}
 <h1>Dashboard</h1>
@@ -14,6 +15,7 @@
 {% if multi_profile %}
 <form class="filters" method="get" action="/">
     {% if show_all %}<input type="hidden" name="show_all" value="1">{% endif %}
+    {% if sort %}<input type="hidden" name="sort" value="{{ sort }}"><input type="hidden" name="dir" value="{{ dir }}">{% endif %}
     <label>Profile
         <select name="profile_id" onchange="this.form.submit()">
             <option value="all" {% if selected_profile == "all" %}selected{% endif %}>All profiles</option>
@@ -63,13 +65,13 @@
     <h2>All brokers</h2>
     {% if hidden %}
     <p class="muted">{{ hidden }} broker(s) hidden (not listing your data) &mdash;
-        <a href="/?profile_id={{ selected_profile }}&show_all=1">show all</a></p>
+        <a href="/?profile_id={{ selected_profile }}&show_all=1{% if sort %}&sort={{ sort }}&dir={{ dir }}{% endif %}">show all</a></p>
     {% elif show_all %}
     <p class="muted">Showing all brokers &mdash;
-        <a href="/?profile_id={{ selected_profile }}">hide not-found</a></p>
+        <a href="/?profile_id={{ selected_profile }}{% if sort %}&sort={{ sort }}&dir={{ dir }}{% endif %}">hide not-found</a></p>
     {% endif %}
     <table>
-        <thead><tr><th>Broker</th>{% if multi_profile %}<th>Profile</th>{% endif %}<th>Category</th><th>Exposure</th><th>Status</th><th>Next due</th></tr></thead>
+        <thead><tr>{{ sort_th('broker', 'Broker', sort, dir) }}{% if multi_profile %}{{ sort_th('profile', 'Profile', sort, dir) }}{% endif %}{{ sort_th('category', 'Category', sort, dir) }}{{ sort_th('exposure', 'Exposure', sort, dir) }}{{ sort_th('status', 'Status', sort, dir) }}{{ sort_th('next_due', 'Next due', sort, dir) }}</tr></thead>
         <tbody>
         {% for broker, profile, r, exposure in rows %}
             <tr>

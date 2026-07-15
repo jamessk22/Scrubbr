@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% from "_badges.html" import exposure_badge with context %}
+{% from "_sort.html" import sort_th with context %}
 {% block title %}Scan &middot; Scrubbr{% endblock %}
 {% block body %}
 <h1>Exposure scan</h1>
@@ -9,6 +10,8 @@ Requests go straight from this machine to the broker, at a slow, human-like pace
 
 {% if multi_profile %}
 <form class="filters" method="get" action="/scan">
+    {% if sort %}<input type="hidden" name="sort" value="{{ sort }}"><input type="hidden" name="dir" value="{{ dir }}">{% endif %}
+    {% if asort %}<input type="hidden" name="asort" value="{{ asort }}"><input type="hidden" name="adir" value="{{ adir }}">{% endif %}
     <label>Profile
         <select name="profile_id" onchange="this.form.submit()">
             {% for p in profiles %}
@@ -44,7 +47,7 @@ Requests go straight from this machine to the broker, at a slow, human-like pace
     <h3 class="group-head"><span class="badge e-{{ status }}">{{ EXPOSURE_LABELS[status] }}</span>
         <span class="muted">{{ rows|length }} broker(s)</span></h3>
     <table>
-        <thead><tr><th>Broker</th><th>Exposure</th><th></th></tr></thead>
+        <thead><tr>{{ sort_th('broker', 'Broker', sort, dir) }}<th>Exposure</th><th></th></tr></thead>
         <tbody>
         {% for row in rows %}
             <tr>
@@ -144,7 +147,7 @@ Requests go straight from this machine to the broker, at a slow, human-like pace
     automatically &mdash; set each one's exposure by hand here. They stay active and should still
     receive removal requests.</p>
     <table>
-        <thead><tr><th>Broker</th><th>Category</th><th>Exposure</th></tr></thead>
+        <thead><tr>{{ sort_th('broker', 'Broker', asort, adir, param='asort', dirparam='adir') }}{{ sort_th('category', 'Category', asort, adir, param='asort', dirparam='adir') }}{{ sort_th('exposure', 'Exposure', asort, adir, param='asort', dirparam='adir') }}</tr></thead>
         <tbody>
         {% for row in assumed %}
             <tr>

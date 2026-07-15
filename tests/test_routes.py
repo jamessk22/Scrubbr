@@ -38,6 +38,58 @@ def client(tmp_path, monkeypatch):
     return c
 
 
+def test_sort_rows_invalid_key_unchanged():
+    rows = [{"n": 3}, {"n": 1}, {"n": 2}]
+    assert main._sort_rows(rows, "bogus", "asc", {"n": lambda r: r["n"]}) is rows
+
+
+def test_sort_rows_asc_desc():
+    rows = [{"n": 3}, {"n": 1}, {"n": 2}]
+    keys = {"n": lambda r: r["n"]}
+    assert [r["n"] for r in main._sort_rows(rows, "n", "asc", keys)] == [1, 2, 3]
+    assert [r["n"] for r in main._sort_rows(rows, "n", "desc", keys)] == [3, 2, 1]
+
+
+def test_sort_rows_none_keys_last_both_directions():
+    rows = [{"n": 2}, {"n": None}, {"n": 1}]
+    keys = {"n": lambda r: r["n"]}
+    assert [r["n"] for r in main._sort_rows(rows, "n", "asc", keys)] == [1, 2, None]
+    assert [r["n"] for r in main._sort_rows(rows, "n", "desc", keys)] == [2, 1, None]
+
+
+def test_exposure_rank_by_severity_not_alphabetical():
+    assert main._EXPOSURE_RANK["found"] < main._EXPOSURE_RANK["not_found"]
+
+
+def _seed_zeta(client):
+    conn = main.get_conn()
+    db.upsert_broker(conn, {"name": "Zeta Broker", "category": "people-search"})
+    conn.commit()
+    conn.close()
+
+
+def test_dashboard_sort_broker_asc_desc(client):
+    _seed_zeta(client)
+    resp = client.get("/?show_all=1&sort=broker&dir=desc")
+    assert resp.status_code == 200
+    assert resp.text.index("Zeta Broker") < resp.text.index("Acme Broker")
+    resp = client.get("/?show_all=1&sort=broker&dir=asc")
+    assert resp.text.index("Acme Broker") < resp.text.index("Zeta Broker")
+
+
+def test_brokers_sort_preserves_filter_in_header_link(client):
+    resp = client.get("/brokers?category=people-search&sort=broker&dir=asc")
+    assert resp.status_code == 200
+    assert "category=people-search" in resp.text
+
+
+def test_dashboard_bogus_sort_defaults(client):
+    _seed_zeta(client)
+    resp = client.get("/?show_all=1&sort=bogus&dir=sideways")
+    assert resp.status_code == 200
+    assert resp.text.index("Acme Broker") < resp.text.index("Zeta Broker")
+
+
 def test_resolve_review_handles_slashed_message_id(client):
     """A raw RFC 5322 Message-ID with a '/' must resolve (bug: it lived in the
     URL path and 404'd)."""

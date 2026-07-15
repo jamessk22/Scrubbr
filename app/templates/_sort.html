@@ -1,0 +1,14 @@
+{% macro sort_th(key, label, sort, dir, param='sort', dirparam='dir') %}
+{%- set active = sort == key -%}
+{%- set next_dir = 'desc' if active and dir != 'desc' else 'asc' -%}
+{%- set base -%}
+{%- for k, v in request.query_params.items() if k not in (param, dirparam) -%}
+{{ k | urlencode }}={{ v | urlencode }}&amp;{% endfor -%}
+{%- endset -%}
+<th aria-sort="{{ 'descending' if active and dir == 'desc' else ('ascending' if active else 'none') }}">
+    <a class="sort{{ ' active' if active }}"
+       href="{{ request.url.path }}?{{ base }}{{ param }}={{ key }}&{{ dirparam }}={{ next_dir }}">
+        {{ label }}{% if active %}<span class="sort-arrow">{{ '▼' if dir == 'desc' else '▲' }}</span>{% endif %}
+    </a>
+</th>
+{% endmacro %}

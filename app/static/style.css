@@ -170,6 +170,21 @@ th {
   letter-spacing: 0.04em;
 }
 
+th a.sort {
+  color: inherit;
+  text-decoration: none;
+}
+
+th a.sort:hover,
+th a.sort.active {
+  color: var(--text);
+}
+
+.sort-arrow {
+  font-size: 0.7em;
+  margin-left: 4px;
+}
+
 tbody tr:hover {
   background: var(--panel);
 }

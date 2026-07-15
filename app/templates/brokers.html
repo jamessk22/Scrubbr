@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% from "_badges.html" import exposure_badge, status_badge with context %}
+{% from "_sort.html" import sort_th with context %}
 {% block title %}Brokers &middot; Scrubbr{% endblock %}
 {% block body %}
 <h1>Broker directory</h1>
@@ -40,18 +41,19 @@
         </select>
     </label>
     {% if show_all %}<input type="hidden" name="show_all" value="1">{% endif %}
+    {% if sort %}<input type="hidden" name="sort" value="{{ sort }}"><input type="hidden" name="dir" value="{{ dir }}">{% endif %}
     <noscript><button type="submit">Filter</button></noscript>
 </form>
 
 <p class="muted">{{ rows|length }} broker(s)
 {% if hidden %}&mdash; {{ hidden }} hidden (not listing your data),
-    <a href="/brokers?profile_id={{ selected_profile }}&category={{ sel_category }}&status={{ sel_status }}&show_all=1">show all</a>
+    <a href="/brokers?profile_id={{ selected_profile }}&category={{ sel_category }}&status={{ sel_status }}&show_all=1{% if sort %}&sort={{ sort }}&dir={{ dir }}{% endif %}">show all</a>
 {% elif show_all %}&mdash; showing all,
-    <a href="/brokers?profile_id={{ selected_profile }}&category={{ sel_category }}&status={{ sel_status }}">hide not-found</a>
+    <a href="/brokers?profile_id={{ selected_profile }}&category={{ sel_category }}&status={{ sel_status }}{% if sort %}&sort={{ sort }}&dir={{ dir }}{% endif %}">hide not-found</a>
 {% endif %}</p>
 
 <table>
-    <thead><tr><th>Broker</th>{% if multi_profile %}<th>Profile</th>{% endif %}<th>Category</th><th>Method</th><th>Difficulty</th><th>Exposure</th><th>Status</th></tr></thead>
+    <thead><tr>{{ sort_th('broker', 'Broker', sort, dir) }}{% if multi_profile %}{{ sort_th('profile', 'Profile', sort, dir) }}{% endif %}{{ sort_th('category', 'Category', sort, dir) }}{{ sort_th('method', 'Method', sort, dir) }}{{ sort_th('difficulty', 'Difficulty', sort, dir) }}{{ sort_th('exposure', 'Exposure', sort, dir) }}{{ sort_th('status', 'Status', sort, dir) }}</tr></thead>
     <tbody>
     {% for broker, profile, r, exposure in rows %}
         <tr>

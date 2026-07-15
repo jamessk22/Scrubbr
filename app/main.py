@@ -79,6 +79,19 @@ SCAN_GROUP_ORDER = [
     EXPOSURE_UNREACHABLE, EXPOSURE_UNKNOWN, EXPOSURE_NOT_FOUND,
 ]
 
+_EXPOSURE_RANK = {s: i for i, s in enumerate(SCAN_GROUP_ORDER)}  # worst-first
+_STATUS_RANK = {s: i for i, s in enumerate(STATUS_LABELS)}       # pipeline order
+
+
+def _sort_rows(rows, sort, direction, keys):
+    key_fn = keys.get(sort)
+    if key_fn is None:
+        return rows
+    present = [r for r in rows if key_fn(r) is not None]
+    absent = [r for r in rows if key_fn(r) is None]
+    present.sort(key=key_fn, reverse=direction == "desc")
+    return present + absent
+
 
 def get_conn():
     conn = db.connect()
@@ -100,7 +113,7 @@ def _profile_scope(profile_id: str, profiles: list[Profile]) -> tuple[list[Profi
 
 
 @app.get("/", response_class=HTMLResponse)
-def dashboard(request: HttpRequest, profile_id: str = "", show_all: str = ""):
+def dashboard(request: HttpRequest, profile_id: str = "", show_all: str = "", sort: str = "", dir: str = ""):
     conn = get_conn()
     try:
         profiles = db.all_profiles(conn)
@@ -123,6 +136,14 @@ def dashboard(request: HttpRequest, profile_id: str = "", show_all: str = ""):
         due_brokers = [(db.get_broker(conn, r.broker_id), db.get_profile(conn, r.profile_id), r) for r in due]
         review = db.review_queue(conn)
         rows.sort(key=lambda x: (x[2].status != STATUS_NEEDS_VERIFICATION, x[0].name.lower(), x[1].name.lower()))
+        rows = _sort_rows(rows, sort, dir, {
+            "broker": lambda t: t[0].name.casefold(),
+            "profile": lambda t: t[1].name.casefold(),
+            "category": lambda t: t[0].category.casefold(),
+            "exposure": lambda t: _EXPOSURE_RANK[t[3]],
+            "status": lambda t: _STATUS_RANK[t[2].status],
+            "next_due": lambda t: t[2].next_due,
+        })
         cfg = load_config()
         return views.TemplateResponse("dashboard.html", {
             "request": request, "rows": rows, "counts": counts,
@@ -131,6 +152,7 @@ def dashboard(request: HttpRequest, profile_id: str = "", show_all: str = ""):
             "review_count": len(review), "profile_ready": all(p.full_name for p in profiles),
             "profiles": profiles, "selected_profile": selected, "multi_profile": len(profiles) > 1,
             "imap_enabled": cfg.get("imap", {}).get("enabled", False),
+            "sort": sort, "dir": dir,
         })
     finally:
         conn.close()
@@ -138,7 +160,8 @@ def dashboard(request: HttpRequest, profile_id: str = "", show_all: str = ""):
 
 @app.get("/brokers", response_class=HTMLResponse)
 def broker_list(request: HttpRequest, category: str = "", status: str = "",
-                exposure: str = "", profile_id: str = "", show_all: str = ""):
+                exposure: str = "", profile_id: str = "", show_all: str = "",
+                sort: str = "", dir: str = ""):
     conn = get_conn()
     try:
         profiles = db.all_profiles(conn)
@@ -166,6 +189,15 @@ def broker_list(request: HttpRequest, category: str = "", status: str = "",
                     hidden += 1
                     continue
                 rows.append((b, p, r, exp))
+        rows = _sort_rows(rows, sort, dir, {
+            "broker": lambda t: t[0].name.casefold(),
+            "profile": lambda t: t[1].name.casefold(),
+            "category": lambda t: t[0].category.casefold(),
+            "method": lambda t: t[0].contact_method,
+            "difficulty": lambda t: t[0].difficulty,
+            "exposure": lambda t: _EXPOSURE_RANK[t[3]],
+            "status": lambda t: _STATUS_RANK[t[2].status],
+        })
         categories = sorted({b.category for b in brokers})
         return views.TemplateResponse("brokers.html", {
             "request": request, "rows": rows, "categories": categories,
@@ -173,6 +205,7 @@ def broker_list(request: HttpRequest, category: str = "", status: str = "",
             "hidden": hidden, "show_all": bool(show_all),
             "statuses": STATUS_LABELS,
             "profiles": profiles, "selected_profile": selected, "multi_profile": len(profiles) > 1,
+            "sort": sort, "dir": dir,
         })
     finally:
         conn.close()
@@ -271,7 +304,8 @@ def _run_bulk_scan(profile_id: int, broker_ids: list[int]) -> None:
 
 
 @app.get("/scan", response_class=HTMLResponse)
-def scan_page(request: HttpRequest, profile_id: str = ""):
+def scan_page(request: HttpRequest, profile_id: str = "", sort: str = "", dir: str = "",
+              asort: str = "", adir: str = ""):
     conn = get_conn()
     try:
         profiles = db.all_profiles(conn)
@@ -303,6 +337,9 @@ def scan_page(request: HttpRequest, profile_id: str = ""):
                 "weak": bool(snapshot) and snapshot.get("page_scope") == scanner.SCOPE_UNSCOPED,
             })
         searchable.sort(key=lambda row: row["broker"].name.lower())
+        searchable = _sort_rows(searchable, sort, dir, {
+            "broker": lambda r: r["broker"].name.casefold(),
+        })
         groups = [
             (status, [row for row in searchable if row["status"] == status])
             for status in SCAN_GROUP_ORDER
@@ -317,6 +354,11 @@ def scan_page(request: HttpRequest, profile_id: str = ""):
             }
             for b in brokers if not b.search_url
         ]
+        assumed = _sort_rows(assumed, asort, adir, {
+            "broker": lambda r: r["broker"].name.casefold(),
+            "category": lambda r: r["broker"].category.casefold(),
+            "exposure": lambda r: _EXPOSURE_RANK[r["status"]],
+        })
         drifting = [
             (b, streak, reason) for b, streak, reason in db.drifting_brokers(conn, DRIFT_STREAK_THRESHOLD)
             if not scan_service.is_skipped(b)
@@ -326,6 +368,7 @@ def scan_page(request: HttpRequest, profile_id: str = ""):
             "multi_profile": len(profiles) > 1,
             "groups": groups, "assumed": assumed, "ctx_ready": ctx is not None,
             "bulk": _bulk_scans.get(profile.id), "drifting": drifting,
+            "sort": sort, "dir": dir, "asort": asort, "adir": adir,
         })
     finally:
         conn.close()
@@ -405,12 +448,17 @@ def scan_mark(broker_id: int, profile_id: int = Form(...), status: str = Form(..
 
 
 @app.get("/profiles", response_class=HTMLResponse)
-def profiles_page(request: HttpRequest):
+def profiles_page(request: HttpRequest, sort: str = "", dir: str = ""):
     conn = get_conn()
     try:
         profiles = db.all_profiles(conn)
+        profiles = _sort_rows(list(profiles), sort, dir, {
+            "label": lambda p: p.name.casefold(),
+            "full_name": lambda p: p.full_name.casefold() or None,
+            "state": lambda p: p.state.casefold() or None,
+        })
         return views.TemplateResponse("profiles.html", {
-            "request": request, "profiles": profiles,
+            "request": request, "profiles": profiles, "sort": sort, "dir": dir,
         })
     finally:
         conn.close()
