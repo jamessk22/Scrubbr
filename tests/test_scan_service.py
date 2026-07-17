@@ -190,6 +190,25 @@ def test_scan_and_persist_never_overwrites_manual_verdict(conn, db_profile, prof
     assert exp.source == "manual"
 
 
+def test_scan_and_persist_never_overwrites_propagated_verdict(conn, db_profile, profile_id):
+    """A verdict propagated from a same-network sibling's manual mark is
+    human-originated, so an auto rescan must not silently flip it."""
+    broker = _broker(conn)
+    db.set_exposure(conn, broker.id, profile_id, EXPOSURE_NOT_FOUND, "network")
+
+    calls = []
+
+    def fetch(url, result_selector=""):
+        calls.append(url)
+        return fetcher.FetchResult(final_url=url, html=FOUND_HTML, status=200)
+
+    outcome = scan_service.scan_and_persist(conn, broker, db_profile, fetch=fetch)
+
+    assert calls == []
+    assert outcome.status == EXPOSURE_NOT_FOUND
+    assert db.get_exposure(conn, broker.id, profile_id).source == "network"
+
+
 def test_scan_and_persist_overwrites_prior_auto_verdict(conn, db_profile, profile_id):
     broker = _broker(conn)
     db.set_exposure(conn, broker.id, profile_id, EXPOSURE_NOT_FOUND, "auto")

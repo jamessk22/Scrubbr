@@ -125,11 +125,12 @@ def _persist(conn, broker_id: int, profile_id: int, outcome: ScanOutcome) -> Non
 
 
 def scan_and_persist(conn, broker: Broker, profile: Profile, fetch=fetcher.fetch) -> ScanOutcome:
-    """Runs scan() and persists the result, unless a prior *manual* verdict
-    for this broker/profile exists -- a manual mark always wins over an auto
-    (re-)scan, so it's checked before touching the network at all."""
+    """Runs scan() and persists the result, unless a prior human-originated verdict
+    for this broker/profile exists -- a manual mark (or a verdict propagated from a
+    same-network sibling's manual mark) always wins over an auto (re-)scan, so it's
+    checked before touching the network at all."""
     existing = db.get_exposure(conn, broker.id, profile.id)
-    if existing is not None and existing.source == "manual":
+    if existing is not None and existing.source in ("manual", "network"):
         return ScanOutcome(existing.status, detail="Manual verdict kept", url=existing.evidence)
     outcome = scan(broker, profile, fetch=fetch)
     _persist(conn, broker.id, profile.id, outcome)

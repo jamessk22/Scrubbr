@@ -148,6 +148,51 @@ def test_scan_mark_rejects_offsite_back_param(client):
     assert resp.headers["location"] == f"/scan?profile_id={client.profile_id}"
 
 
+def _seed_network(client, names):
+    conn = main.get_conn()
+    for name in names:
+        db.upsert_broker(conn, {"name": name, "category": "people-search", "network": "peopleconnect"})
+    conn.commit()
+    ids = {b.name: b.id for b in db.all_brokers(conn) if b.name in names}
+    conn.close()
+    return ids
+
+
+def test_scan_mark_propagates_across_network(client):
+    ids = _seed_network(client, ["Intelius", "TruthFinder", "US Search"])
+    client.post(f"/scan/{ids['Intelius']}/mark", data={
+        "profile_id": client.profile_id, "status": "found",
+    }, follow_redirects=False)
+
+    conn = main.get_conn()
+    exps = db.exposures_for_profile(conn, client.profile_id)
+    conn.close()
+    assert exps[ids["Intelius"]].status == "found" and exps[ids["Intelius"]].source == "manual"
+    for name in ("TruthFinder", "US Search"):
+        assert exps[ids[name]].status == "found" and exps[ids[name]].source == "network"
+
+
+def test_scan_mark_unknown_clears_propagated_but_keeps_manual(client):
+    ids = _seed_network(client, ["Intelius", "TruthFinder", "US Search"])
+    client.post(f"/scan/{ids['Intelius']}/mark", data={
+        "profile_id": client.profile_id, "status": "found",
+    }, follow_redirects=False)
+    # A hand-set verdict on one sibling must survive the network clear.
+    client.post(f"/scan/{ids['US Search']}/mark", data={
+        "profile_id": client.profile_id, "status": "not_found",
+    }, follow_redirects=False)
+    client.post(f"/scan/{ids['Intelius']}/mark", data={
+        "profile_id": client.profile_id, "status": "unknown",
+    }, follow_redirects=False)
+
+    conn = main.get_conn()
+    exps = db.exposures_for_profile(conn, client.profile_id)
+    conn.close()
+    assert ids["Intelius"] not in exps      # anchor cleared
+    assert ids["TruthFinder"] not in exps   # propagated sibling cleared
+    assert exps[ids["US Search"]].source == "manual"  # own verdict kept
+
+
 def test_scan_status_returns_empty_state_for_unknown_profile(client):
     resp = client.get("/scan/status", params={"profile_id": 999999})
     assert resp.status_code == 200

@@ -333,7 +333,7 @@ def scan_page(request: HttpRequest, profile_id: str = "", sort: str = "", dir: s
                 "source": exp.source if exp else "",
                 "stale": ratelimit.is_stale(exp.checked_at if exp else None, rescan_after_days),
                 "manual_only": scan_service.is_skipped(b),
-                "likely_via": networks.get(b.network, ""),
+                "likely_via": exp.evidence if exp and exp.source == "network" else networks.get(b.network, ""),
                 "weak": bool(snapshot) and snapshot.get("page_scope") == scanner.SCOPE_UNSCOPED,
             })
         searchable.sort(key=lambda row: row["broker"].name.lower())
@@ -350,7 +350,7 @@ def scan_page(request: HttpRequest, profile_id: str = "", sort: str = "", dir: s
                 "broker": b,
                 "status": effective_exposure(b, exposures.get(b.id), networks),
                 "source": exposures[b.id].source if b.id in exposures else "",
-                "likely_via": networks.get(b.network, ""),
+                "likely_via": exposures[b.id].evidence if b.id in exposures and exposures[b.id].source == "network" else networks.get(b.network, ""),
             }
             for b in brokers if not b.search_url
         ]
@@ -437,10 +437,15 @@ def _safe_redirect_target(back: str, default: str) -> str:
 def scan_mark(broker_id: int, profile_id: int = Form(...), status: str = Form(...), back: str = Form("")):
     conn = get_conn()
     try:
+        broker = db.get_broker(conn, broker_id)
         if status == EXPOSURE_UNKNOWN:
             db.clear_exposure(conn, broker_id, profile_id)
+            if broker and broker.network:
+                db.clear_propagated_in_network(conn, broker.network, profile_id)
         elif status in EXPOSURE_CHOICES:
             db.set_exposure(conn, broker_id, profile_id, status, "manual")
+            if broker and broker.network:
+                db.propagate_exposure(conn, broker, profile_id, status)
         target = _safe_redirect_target(back, f"/scan?profile_id={profile_id}")
         return RedirectResponse(target, status_code=303)
     finally:

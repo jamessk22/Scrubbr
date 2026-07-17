@@ -1,5 +1,5 @@
 {
-  "_comment": "Curated seed of high-priority US data brokers. Opt-out URLs/emails change often; verify before relying on them. category: people-search | marketing | risk | recruitment. difficulty: 1 easy web/email, 2 requires account/verification, 3 requires ID upload/notary/phone. jurisdiction is the broker's governing regime (US | GDPR | UK-GDPR); for US brokers the specific state-law template is chosen from the user's own residency, not this field. search_url (optional): GET URL template for the broker's public people-search with {first} {last} {city} {state} placeholders; values in the path get spaces turned into dashes, query values are URL-encoded. Absent/empty search_url means the broker is unsearchable and treated as assumed-exposed. scan (optional): config for the Playwright auto-scan pipeline -- {search_url (same template syntax as search_url above), result_selector (CSS selector for one result card), fields: {name, age, locations, relatives} (CSS selectors scoped within a result card)}. verified:false means the selectors are unconfirmed against a live page -- treat like opt-out URLs, needs a real scan to confirm before trusting. scan (optional): per-broker scan config -- search_url (as above), verified (false until selectors/URL confirmed against a live rendered page), optional result_selector + fields{name,age,locations,relatives} CSS selectors (omit selectors to use extract.py's generic fallback), notes. network (optional): shared-owner/database group id (peopleconnect | whitepages | beenverified | tps-family); a found/not_found verdict on one member is evidence for siblings -- see docs/exposure-scan-plan.md. scan.url_confirmed: date the search_url was verified against a live rendered page. scan.skip: true = do not auto-scan (wizard/JS-shell/bot-wall); keep for the manual link only.",
+  "_comment": "Curated seed of high-priority US data brokers. Opt-out URLs/emails change often; verify before relying on them. category: people-search | marketing | risk | recruitment. difficulty: 1 easy web/email, 2 requires account/verification, 3 requires ID upload/notary/phone. jurisdiction is the broker's governing regime (US | GDPR | UK-GDPR); for US brokers the specific state-law template is chosen from the user's own residency, not this field. search_url (optional): GET URL template for the broker's public people-search with {first} {last} {city} {state} placeholders; values in the path get spaces turned into dashes, query values are URL-encoded. Absent/empty search_url means the broker is unsearchable and treated as assumed-exposed. scan (optional): config for the Playwright auto-scan pipeline -- {search_url (same template syntax as search_url above), result_selector (CSS selector for one result card), fields: {name, age, locations, relatives} (CSS selectors scoped within a result card)}. verified:false means the selectors are unconfirmed against a live page -- treat like opt-out URLs, needs a real scan to confirm before trusting. scan (optional): per-broker scan config -- search_url (as above), verified (false until selectors/URL confirmed against a live rendered page), optional result_selector + fields{name,age,locations,relatives} CSS selectors (omit selectors to use extract.py's generic fallback), notes. network (optional): shared-owner/database group id (peopleconnect | whitepages | beenverified | tps-family | ancestry | spokeo | radaris); a found/not_found/assumed verdict manually set on one member propagates to every sibling in the group (one shared database, one verdict) -- see docs/exposure-scan-plan.md. scan.url_confirmed: date the search_url was verified against a live rendered page. scan.skip: true = do not auto-scan (wizard/JS-shell/bot-wall); keep for the manual link only.",
   "brokers": [
     {
       "name": "Acxiom",
@@ -107,7 +107,8 @@
         "search_url": "https://www.spokeo.com/{first}-{last}",
         "notes": "Checked live 2026-07-09: EVERY entry URL (name-only, /Massachusetts, /Massachusetts/Boston) now lands on a 'Where does John live?' city/state wizard -- results are not URL-addressable. Manual link still useful (human fills the wizard). Needs form-mode; until then auto scan is skipped.",
         "skip": true
-      }
+      },
+      "network": "spokeo"
     },
     {
       "name": "BeenVerified",
@@ -522,7 +523,8 @@
       "contact_method": "form",
       "jurisdiction": "US",
       "difficulty": 1,
-      "notes": "Intelius network."
+      "notes": "Intelius network.",
+      "network": "peopleconnect"
     },
     {
       "name": "Rehold",
@@ -675,7 +677,8 @@
         },
         "url_confirmed": "2026-07-09",
         "notes": "Verified live 2026-07-09 against a real profile: the true person surfaced as a `found` match. No URL state scoping (nationwide, paginated) so page-1 not_found is weak. NOTE: page ships a Next.js JSON blob containing 'there are no matches' fallback copy -- extract() checks visible text only so it isn't a false not_found."
-      }
+      },
+      "network": "peopleconnect"
     },
     {
       "name": "Epsilon Abacus",
@@ -960,7 +963,8 @@
       "contact_method": "both",
       "jurisdiction": "US",
       "difficulty": 3,
-      "notes": "Genealogy/DNA. Deletion means deleting the account and verifying identity (government ID); irreversible. No public GET-addressable search (records are paywalled)."
+      "notes": "Genealogy/DNA. Deletion means deleting the account and verifying identity (government ID); irreversible. No public GET-addressable search (records are paywalled).",
+      "network": "ancestry"
     },
     {
       "name": "Archives.com",
@@ -971,7 +975,8 @@
       "contact_method": "both",
       "jurisdiction": "US",
       "difficulty": 2,
-      "notes": "Ancestry-owned genealogy records; privacy requests handled by Ancestry. Records are paywalled, not URL-addressable."
+      "notes": "Ancestry-owned genealogy records; privacy requests handled by Ancestry. Records are paywalled, not URL-addressable.",
+      "network": "ancestry"
     },
     {
       "name": "Classmates.com",
@@ -1026,7 +1031,8 @@
       "contact_method": "both",
       "jurisdiction": "US",
       "difficulty": 1,
-      "notes": "Spokeo-owned (CA DROP registry); opt-out mirrors Spokeo's. Results load behind a Spokeo-style city/state wizard, so not URL-addressable."
+      "notes": "Spokeo-owned (CA DROP registry); opt-out mirrors Spokeo's. Results load behind a Spokeo-style city/state wizard, so not URL-addressable.",
+      "network": "spokeo"
     },
     {
       "name": "PeopleByName",
@@ -1125,7 +1131,8 @@
       "contact_method": "form",
       "jurisdiction": "US",
       "difficulty": 1,
-      "notes": "Distinct domain from the .com; mirrors the TruePeopleSearch engine. Captcha or phone (888-838-4803) to confirm. Results path not confirmed URL-addressable."
+      "notes": "Distinct domain from the .com; mirrors the TruePeopleSearch engine. Captcha or phone (888-838-4803) to confirm. Results path not confirmed URL-addressable.",
+      "network": "tps-family"
     },
     {
       "name": "UnMask",

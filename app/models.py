@@ -44,6 +44,11 @@ EXPOSURE_ASSUMED = "assumed"  # unsearchable broker: derived when no verdict is 
 EXPOSURE_LIKELY = "likely"  # derived, never stored: a same-network sibling was found
 AUTO_EXPOSURE_STATUSES = {EXPOSURE_FOUND, EXPOSURE_NOT_FOUND, EXPOSURE_POSSIBLE, EXPOSURE_UNREACHABLE}
 
+# Exposure `source` values. "manual" (set by hand on this broker) and "auto" (scan
+# result) are inline literals elsewhere; "network" is a verdict propagated from a
+# same-network sibling's manual mark.
+EXPOSURE_SOURCE_NETWORK = "network"
+
 # Consecutive unreachable scans before a broker's scan config is called out as drifting.
 DRIFT_STREAK_THRESHOLD = 2
 

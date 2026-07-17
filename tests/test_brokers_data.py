@@ -9,6 +9,7 @@ BROKERS_PATH = Path(__file__).resolve().parent.parent / "data" / "brokers.json"
 CATEGORIES = {"people-search", "marketing", "risk", "recruitment"}
 CONTACT_METHODS = {"email", "form", "both"}
 JURISDICTIONS = {"US", "GDPR", "UK-GDPR"}
+NETWORKS = {"peopleconnect", "whitepages", "beenverified", "tps-family", "ancestry", "spokeo", "radaris"}
 REQUIRED = ("name", "category", "website", "contact_method", "jurisdiction", "difficulty")
 
 
@@ -54,6 +55,24 @@ def test_scan_config_implies_search_url(brokers):
     for b in brokers:
         if "scan" in b:
             assert b.get("search_url"), f"{b['name']}: has scan config but no search_url"
+
+
+def test_network_ids_are_known(brokers):
+    for b in brokers:
+        net = b.get("network", "")
+        assert net == "" or net in NETWORKS, f"{b['name']}: unknown network {net!r}"
+
+
+def test_expected_network_memberships(brokers):
+    members = {}
+    for b in brokers:
+        if b.get("network"):
+            members.setdefault(b["network"], set()).add(b["name"])
+    assert {"PublicRecordsNow", "AnyWho"} <= members["peopleconnect"]
+    assert "TruePeopleSearch.net" in members["tps-family"]
+    # groups added for shared ownership need both members to actually propagate
+    assert len(members["ancestry"]) >= 2
+    assert len(members["spokeo"]) >= 2
 
 
 def test_email_method_implies_email_present(brokers):

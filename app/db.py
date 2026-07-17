@@ -7,6 +7,7 @@ from pathlib import Path
 from .config import DEFAULT_DB_PATH
 from .models import (
     DEFAULT_FOLLOWUP_DAYS,
+    EXPOSURE_SOURCE_NETWORK,
     EXPOSURE_UNREACHABLE,
     FOLLOWUP_DAYS,
     STATUS_SENT,
@@ -375,6 +376,44 @@ def clear_exposure(conn: sqlite3.Connection, broker_id: int, profile_id: int) ->
     """Drop the stored verdict so the broker falls back to its derived state."""
     conn.execute(
         "DELETE FROM exposures WHERE broker_id = ? AND profile_id = ?", (broker_id, profile_id)
+    )
+    conn.commit()
+
+
+def brokers_in_network(conn: sqlite3.Connection, network: str) -> list[Broker]:
+    rows = conn.execute(
+        "SELECT * FROM brokers WHERE network = ? AND network != '' ORDER BY name", (network,)
+    ).fetchall()
+    return [_broker(r) for r in rows]
+
+
+def propagate_exposure(
+    conn: sqlite3.Connection, anchor: Broker, profile_id: int, status: str
+) -> None:
+    """Copy a manual verdict to every same-network sibling (one shared database ->
+    one verdict). A sibling's own `manual` verdict is left untouched; `auto` and
+    prior propagated rows are overwritten, and empty ones filled."""
+    for sibling in brokers_in_network(conn, anchor.network):
+        if sibling.id == anchor.id:
+            continue
+        existing = get_exposure(conn, sibling.id, profile_id)
+        if existing is not None and existing.source == "manual":
+            continue
+        set_exposure(
+            conn, sibling.id, profile_id, status, EXPOSURE_SOURCE_NETWORK, evidence=anchor.name
+        )
+
+
+def clear_propagated_in_network(
+    conn: sqlite3.Connection, network: str, profile_id: int
+) -> None:
+    """Drop propagated verdicts across a network, leaving siblings' own manual/auto
+    rows in place -- the counterpart to `propagate_exposure` for `unknown`."""
+    conn.execute(
+        """DELETE FROM exposures
+            WHERE profile_id = ? AND source = ?
+              AND broker_id IN (SELECT id FROM brokers WHERE network = ?)""",
+        (profile_id, EXPOSURE_SOURCE_NETWORK, network),
     )
     conn.commit()
 

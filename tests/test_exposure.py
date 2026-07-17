@@ -132,6 +132,65 @@ def test_likely_never_seeds_another_likely():
     assert found_networks([a, b], {}) == {}
 
 
+# --- network propagation: manual verdict copied to siblings -------------------------
+
+def _seed_network(conn):
+    anchor = _seed_broker(conn, name="Intelius", network="peopleconnect")
+    empty = _seed_broker(conn, name="TruthFinder", network="peopleconnect")
+    auto = _seed_broker(conn, name="US Search", network="peopleconnect")
+    manual = _seed_broker(conn, name="ZabaSearch", network="peopleconnect")
+    outsider = _seed_broker(conn, name="Whitepages", network="whitepages")
+    return anchor, empty, auto, manual, outsider
+
+
+def test_propagate_fills_empty_and_overwrites_auto(conn, profile_id):
+    anchor, empty, auto, _, outsider = _seed_network(conn)
+    db.set_exposure(conn, auto.id, profile_id, EXPOSURE_NOT_FOUND, "auto")
+    db.propagate_exposure(conn, anchor, profile_id, EXPOSURE_FOUND)
+
+    exps = db.exposures_for_profile(conn, profile_id)
+    for sib in (empty, auto):
+        assert exps[sib.id].status == EXPOSURE_FOUND
+        assert exps[sib.id].source == "network"
+        assert exps[sib.id].evidence == "Intelius"  # provenance for the badge note
+    assert anchor.id not in exps  # propagation never writes the anchor's own row
+    assert outsider.id not in exps  # a different network is untouched
+
+
+def test_propagate_preserves_sibling_manual(conn, profile_id):
+    anchor, _, _, manual, _ = _seed_network(conn)
+    db.set_exposure(conn, manual.id, profile_id, EXPOSURE_NOT_FOUND, "manual")
+    db.propagate_exposure(conn, anchor, profile_id, EXPOSURE_FOUND)
+
+    kept = db.get_exposure(conn, manual.id, profile_id)
+    assert kept.status == EXPOSURE_NOT_FOUND  # a hand-set verdict on this broker wins
+    assert kept.source == "manual"
+
+
+def test_propagate_carries_not_found_and_assumed(conn, profile_id):
+    anchor, empty, _, _, _ = _seed_network(conn)
+    db.propagate_exposure(conn, anchor, profile_id, EXPOSURE_NOT_FOUND)
+    assert db.get_exposure(conn, empty.id, profile_id).status == EXPOSURE_NOT_FOUND
+    db.propagate_exposure(conn, anchor, profile_id, EXPOSURE_ASSUMED)
+    assert db.get_exposure(conn, empty.id, profile_id).status == EXPOSURE_ASSUMED
+
+
+def test_clear_propagated_removes_only_network_rows(conn, profile_id):
+    anchor, empty, _, manual, _ = _seed_network(conn)
+    db.set_exposure(conn, manual.id, profile_id, EXPOSURE_NOT_FOUND, "manual")
+    db.propagate_exposure(conn, anchor, profile_id, EXPOSURE_FOUND)
+    db.clear_propagated_in_network(conn, "peopleconnect", profile_id)
+
+    assert db.get_exposure(conn, empty.id, profile_id) is None  # propagated row dropped
+    assert db.get_exposure(conn, manual.id, profile_id).source == "manual"  # own row survives
+
+
+def test_propagate_solo_network_is_noop(conn, profile_id):
+    solo = _seed_broker(conn, name="Veripages", network="radaris")
+    db.propagate_exposure(conn, solo, profile_id, EXPOSURE_FOUND)
+    assert db.exposures_for_profile(conn, profile_id) == {}
+
+
 def test_network_column_migrates_and_round_trips(conn):
     db.upsert_broker(conn, {"name": "Intelius", "category": "people-search", "network": "peopleconnect"})
     conn.commit()

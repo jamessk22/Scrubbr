@@ -14,6 +14,7 @@
     </form>
 </details>
 {%- if status == 'likely' %}<span class="muted exposure-note"> &middot; {{ likely_via }} network</span>
+{%- elif source == 'network' %}<span class="muted exposure-note"> &middot; via {{ likely_via }}</span>
 {%- elif source == 'manual' %}<span class="muted exposure-note"> &middot; manually set</span>{% endif %}
 {% endmacro %}
 
