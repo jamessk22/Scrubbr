@@ -6,7 +6,7 @@
 couldn't tie them to a request, or the wording was ambiguous. Resolve each one manually.</p>
 
 {% if not items %}
-<p>Nothing to review.</p>
+<p class="muted">Nothing to review right now &mdash; ambiguous replies will land here after your next <a href="/">inbox poll</a>.</p>
 {% else %}
 {% for m in items %}
 <div class="review-item">
@@ -19,8 +19,12 @@ couldn't tie them to a request, or the wording was ambiguous. Resolve each one m
         {% if m.profile %}&middot; profile: {{ m.profile.name }}{% endif %}</p>
     <form method="post" action="/review/resolve" class="review-form">
         <input type="hidden" name="message_id" value="{{ m.message_id }}">
-        <input type="number" name="broker_id" placeholder="broker id"
-               value="{{ m.broker.id if m.broker else '' }}" required>
+        <select name="broker_id" required>
+            <option value="" {% if not m.broker %}selected{% endif %} disabled>Select broker&hellip;</option>
+            {% for b in brokers %}
+            <option value="{{ b.id }}" {% if m.broker and m.broker.id == b.id %}selected{% endif %}>{{ b.name }}</option>
+            {% endfor %}
+        </select>
         <select name="profile_id" required>
             {% for p in profiles %}
             <option value="{{ p.id }}" {% if m.profile and m.profile.id == p.id %}selected{% endif %}>{{ p.name }}</option>

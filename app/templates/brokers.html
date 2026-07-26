@@ -6,6 +6,9 @@
 <h1>Broker directory</h1>
 
 <form class="filters" method="get" action="/brokers">
+    <label>Search
+        <input type="search" name="name" value="{{ sel_name }}" placeholder="Broker name&hellip;">
+    </label>
     {% if multi_profile %}
     <label>Profile
         <select name="profile_id" onchange="this.form.submit()">
@@ -47,25 +50,27 @@
 
 <p class="muted">{{ rows|length }} broker(s)
 {% if hidden %}&mdash; {{ hidden }} hidden (not listing your data),
-    <a href="/brokers?profile_id={{ selected_profile }}&category={{ sel_category }}&status={{ sel_status }}&show_all=1{% if sort %}&sort={{ sort }}&dir={{ dir }}{% endif %}">show all</a>
+    <a href="/brokers?profile_id={{ selected_profile }}&category={{ sel_category }}&status={{ sel_status }}&name={{ sel_name | urlencode }}&show_all=1{% if sort %}&sort={{ sort }}&dir={{ dir }}{% endif %}">show all</a>
 {% elif show_all %}&mdash; showing all,
-    <a href="/brokers?profile_id={{ selected_profile }}&category={{ sel_category }}&status={{ sel_status }}{% if sort %}&sort={{ sort }}&dir={{ dir }}{% endif %}">hide not-found</a>
+    <a href="/brokers?profile_id={{ selected_profile }}&category={{ sel_category }}&status={{ sel_status }}&name={{ sel_name | urlencode }}{% if sort %}&sort={{ sort }}&dir={{ dir }}{% endif %}">hide not-found</a>
 {% endif %}</p>
 
+<div class="table-wrap">
 <table>
     <thead><tr>{{ sort_th('broker', 'Broker', sort, dir) }}{% if multi_profile %}{{ sort_th('profile', 'Profile', sort, dir) }}{% endif %}{{ sort_th('category', 'Category', sort, dir) }}{{ sort_th('method', 'Method', sort, dir) }}{{ sort_th('difficulty', 'Difficulty', sort, dir) }}{{ sort_th('exposure', 'Exposure', sort, dir) }}{{ sort_th('status', 'Status', sort, dir) }}</tr></thead>
     <tbody>
     {% for broker, profile, r, exposure in rows %}
         <tr>
-            <td><a href="/broker/{{ broker.id }}?profile_id={{ profile.id }}">{{ broker.name }}</a></td>
-            {% if multi_profile %}<td class="muted">{{ profile.name }}</td>{% endif %}
-            <td class="muted">{{ broker.category }}</td>
-            <td class="muted">{{ broker.contact_method }}</td>
-            <td class="muted">{{ "•" * broker.difficulty }}</td>
-            <td>{{ exposure_badge(exposure, broker.id, profile.id) }}</td>
-            <td>{{ status_badge(r.status, broker.id, profile.id) }}</td>
+            <td data-label="Broker"><a href="/broker/{{ broker.id }}?profile_id={{ profile.id }}">{{ broker.name }}</a></td>
+            {% if multi_profile %}<td data-label="Profile" class="muted">{{ profile.name }}</td>{% endif %}
+            <td data-label="Category" class="muted">{{ broker.category }}</td>
+            <td data-label="Method" class="muted">{{ broker.contact_method }}</td>
+            <td data-label="Difficulty" class="muted">{{ "•" * broker.difficulty }}</td>
+            <td data-label="Exposure">{{ exposure_badge(exposure, broker.id, profile.id) }}</td>
+            <td data-label="Status">{{ status_badge(r.status, broker.id, profile.id) }}</td>
         </tr>
     {% endfor %}
     </tbody>
 </table>
+</div>
 {% endblock %}

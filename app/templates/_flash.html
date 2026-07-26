@@ -1,0 +1,9 @@
+{% set qp = request.query_params %}
+{% if qp.get('imap') == 'disabled' %}
+<div class="flash flash-warn">IMAP is disabled in config.toml, so there's nothing to check &mdash; enable it to poll for broker replies.</div>
+{% elif 'scanned' in qp %}
+<div class="flash {{ 'flash-warn' if qp.get('error') else '' }}">
+    Checked {{ qp.get('scanned') }} message(s) &mdash; {{ qp.get('advanced') }} advanced automatically{% if qp.get('review') and qp.get('review') != '0' %}, {{ qp.get('review') }} sent to review{% endif %}.
+    {% if qp.get('error') %}Some messages couldn't be processed &mdash; check the server log.{% endif %}
+</div>
+{% endif %}

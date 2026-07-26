@@ -1,0 +1,684 @@
+I<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Scrubbr — UI mockup</title>
+<script>
+// No-flash theme init: read a stored preference before first paint.
+(function () {
+    var saved = localStorage.getItem("scrubbr-theme");
+    if (saved) document.documentElement.setAttribute("data-theme", saved);
+})();
+</script>
+<style>
+/* ---------------------------------------------------------------------
+   Fonts — self-hosted, no CDN. Paths are relative to mockups/ so they
+   resolve against the real app/static/fonts/ this mockup shares.
+------------------------------------------------------------------------ */
+@font-face {
+    font-family: "Redaction";
+    src: url("../app/static/fonts/Redaction-Regular.woff2") format("woff2");
+    font-weight: 400;
+    font-display: swap;
+}
+@font-face {
+    font-family: "Public Sans";
+    src: url("../app/static/fonts/PublicSans-Regular.woff2") format("woff2");
+    font-weight: 400;
+    font-display: swap;
+}
+@font-face {
+    font-family: "Public Sans";
+    src: url("../app/static/fonts/PublicSans-SemiBold.woff2") format("woff2");
+    font-weight: 600;
+    font-display: swap;
+}
+@font-face {
+    font-family: "Public Sans";
+    src: url("../app/static/fonts/PublicSans-Bold.woff2") format("woff2");
+    font-weight: 700;
+    font-display: swap;
+}
+@font-face {
+    font-family: "Courier Prime";
+    src: url("../app/static/fonts/CourierPrime-Regular.ttf") format("truetype");
+    font-weight: 400;
+    font-display: swap;
+}
+@font-face {
+    font-family: "Courier Prime";
+    src: url("../app/static/fonts/CourierPrime-Bold.ttf") format("truetype");
+    font-weight: 700;
+    font-display: swap;
+}
+
+/* ---------------------------------------------------------------------
+   Tokens — "Docket" (light) is the base; "Vault" (dark) overrides via
+   prefers-color-scheme and the explicit [data-theme] toggle.
+------------------------------------------------------------------------ */
+:root {
+    --ink: #16150F;
+    --paper: #EFEFEA;
+    --sleeve: #E2E2DB;
+    --rule: #C9C9C0;
+    --stamp: #B0233C;
+    --filed: #3C6E58;
+    --tab: #8A6A28;
+    --graphite: #6E6E64;
+    --shadow: rgb(22 21 15 / 8%);
+
+    --font-display: "Redaction", Georgia, "Iowan Old Style", serif;
+    --font-body: "Public Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    --font-mono: "Courier Prime", ui-monospace, Menlo, monospace;
+
+    --space-1: 4px;
+    --space-2: 8px;
+    --space-3: 12px;
+    --space-4: 16px;
+    --space-5: 24px;
+    --space-6: 32px;
+    --container: 980px;
+    --radius-sm: 3px;
+    --radius-pill: 999px;
+}
+
+@media (prefers-color-scheme: dark) {
+    :root {
+        --ink: #E9E9E1;
+        --paper: #191913;
+        --sleeve: #232320;
+        --rule: #35352F;
+        --stamp: #D9455C;
+        --filed: #5F9B80;
+        --tab: #C79A45;
+        --graphite: #8C8C80;
+        --shadow: rgb(0 0 0 / 35%);
+    }
+}
+:root[data-theme="dark"] {
+    --ink: #E9E9E1;
+    --paper: #191913;
+    --sleeve: #232320;
+    --rule: #35352F;
+    --stamp: #D9455C;
+    --filed: #5F9B80;
+    --tab: #C79A45;
+    --graphite: #8C8C80;
+    --shadow: rgb(0 0 0 / 35%);
+}
+:root[data-theme="light"] {
+    --ink: #16150F;
+    --paper: #EFEFEA;
+    --sleeve: #E2E2DB;
+    --rule: #C9C9C0;
+    --stamp: #B0233C;
+    --filed: #3C6E58;
+    --tab: #8A6A28;
+    --graphite: #6E6E64;
+    --shadow: rgb(22 21 15 / 8%);
+}
+
+* { box-sizing: border-box; }
+
+body {
+    margin: 0;
+    font: 15px/1.55 var(--font-body);
+    color: var(--ink);
+    background: var(--paper);
+    transition: background .15s ease, color .15s ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; animation: none !important; }
+}
+
+a { color: var(--ink); text-decoration-color: var(--rule); text-underline-offset: 3px; }
+a:hover { text-decoration-color: var(--ink); }
+
+:focus-visible {
+    outline: 2px solid var(--stamp);
+    outline-offset: 2px;
+}
+
+h1 {
+    font-family: var(--font-display);
+    font-weight: 400;
+    font-size: 2rem;
+    letter-spacing: 0.01em;
+    margin: 0 0 var(--space-4);
+}
+h2 {
+    font-size: 0.78rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--graphite);
+    margin: var(--space-6) 0 var(--space-3);
+    padding-bottom: var(--space-2);
+    border-bottom: 1px solid var(--rule);
+}
+h3 { font-size: 0.95rem; font-weight: 700; margin: var(--space-4) 0 var(--space-2); }
+
+.muted { color: var(--graphite); }
+code {
+    background: var(--sleeve);
+    padding: 1px 5px;
+    border-radius: var(--radius-sm);
+    font: 0.85em var(--font-mono);
+}
+
+/* ---- mockup harness chrome (not part of the app) ---- */
+.mockup-bar {
+    background: var(--ink);
+    color: var(--paper);
+    font-size: 0.8rem;
+}
+.mockup-bar-inner {
+    max-width: var(--container);
+    margin: 0 auto;
+    padding: var(--space-2) var(--space-4);
+    display: flex;
+    align-items: center;
+    gap: var(--space-4);
+    flex-wrap: wrap;
+}
+.mockup-bar strong { font-weight: 700; }
+.tabs { display: flex; gap: var(--space-1); margin-left: auto; }
+.tabs button {
+    background: transparent;
+    color: var(--paper);
+    border: 1px solid color-mix(in srgb, var(--paper) 35%, transparent);
+    font: 600 0.78rem var(--font-body);
+    padding: 5px 12px;
+    border-radius: var(--radius-pill);
+    cursor: pointer;
+}
+.tabs button[aria-current="true"] {
+    background: var(--paper);
+    color: var(--ink);
+}
+.theme-toggle {
+    background: transparent;
+    color: var(--paper);
+    border: 1px solid color-mix(in srgb, var(--paper) 35%, transparent);
+    font: 600 0.78rem var(--font-body);
+    padding: 5px 12px;
+    border-radius: var(--radius-pill);
+    cursor: pointer;
+}
+
+/* ---- app chrome ---- */
+header {
+    border-bottom: 1px solid var(--rule);
+    background: var(--paper);
+}
+nav {
+    max-width: var(--container);
+    margin: 0 auto;
+    padding: var(--space-3) var(--space-4);
+    display: flex;
+    gap: var(--space-5);
+    align-items: baseline;
+}
+nav .brand {
+    font-family: var(--font-display);
+    font-size: 1.15rem;
+    text-decoration: none;
+}
+nav a.navlink {
+    color: var(--graphite);
+    text-decoration: none;
+    font-size: 0.88rem;
+    font-weight: 600;
+    padding-bottom: 2px;
+    border-bottom: 2px solid transparent;
+}
+nav a.navlink:hover { color: var(--ink); }
+nav a.navlink[aria-current="page"] {
+    color: var(--ink);
+    border-bottom-color: var(--stamp);
+}
+
+main {
+    max-width: var(--container);
+    margin: 0 auto;
+    padding: var(--space-5) var(--space-4) 60px;
+}
+
+footer {
+    border-top: 1px solid var(--rule);
+    color: var(--graphite);
+    font-size: 0.82rem;
+}
+footer p { max-width: var(--container); margin: 0 auto; padding: var(--space-4); }
+
+/* ---- redaction meter (signature element) ---- */
+.meter { margin: var(--space-2) 0 var(--space-6); }
+.meter-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: var(--space-2);
+}
+.meter-head .label {
+    font-family: var(--font-display);
+    font-size: 1rem;
+    letter-spacing: 0.03em;
+}
+.meter-head .total { color: var(--graphite); font-size: 0.85rem; }
+.meter-bar {
+    display: flex;
+    height: 22px;
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+    border: 1px solid var(--rule);
+}
+.meter-bar .seg { height: 100%; }
+.meter-bar .seg.redacted { background: var(--ink); }
+.meter-bar .seg.filed { background: var(--filed); }
+.meter-bar .seg.listed {
+    background-image: repeating-linear-gradient(
+        135deg,
+        var(--sleeve) 0 6px,
+        color-mix(in srgb, var(--sleeve) 60%, var(--rule)) 6px 12px
+    );
+}
+.meter-legend {
+    display: flex;
+    gap: var(--space-5);
+    margin-top: var(--space-2);
+    font-size: 0.85rem;
+    flex-wrap: wrap;
+}
+.meter-legend .dot {
+    display: inline-block;
+    width: 9px;
+    height: 9px;
+    border-radius: 2px;
+    margin-right: 6px;
+    vertical-align: middle;
+}
+.meter-legend .dot.redacted { background: var(--ink); }
+.meter-legend .dot.filed { background: var(--filed); }
+.meter-legend .dot.listed {
+    background-image: repeating-linear-gradient(135deg, var(--sleeve) 0 3px, var(--rule) 3px 6px);
+    border: 1px solid var(--rule);
+}
+.meter-legend .listed-count { color: var(--stamp); font-weight: 700; }
+
+/* ---- panels / banners ---- */
+.banner {
+    padding: var(--space-3) var(--space-4);
+    border-radius: var(--radius-sm);
+    margin: var(--space-4) 0;
+    border: 1px solid var(--rule);
+    background: var(--sleeve);
+}
+.banner.warn { border-color: var(--tab); }
+
+.snapshot {
+    background: var(--sleeve);
+    border: 1px solid var(--rule);
+    border-radius: var(--radius-sm);
+    padding: var(--space-3) var(--space-4);
+    font-size: 0.88rem;
+}
+
+/* ---- tables ---- */
+.table-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; margin: var(--space-2) 0; }
+th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--rule); }
+th {
+    color: var(--graphite);
+    font-weight: 700;
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+}
+th a.sort { color: inherit; text-decoration: none; }
+th a.sort:hover, th a.sort.active { color: var(--ink); }
+.sort-arrow { font-size: 0.7em; margin-left: 4px; }
+tbody tr:hover { background: var(--sleeve); }
+
+/* ---- badges ---- */
+.badge {
+    display: inline-block;
+    padding: 3px 11px;
+    border-radius: var(--radius-pill);
+    font-size: 0.78rem;
+    font-weight: 700;
+    white-space: nowrap;
+    border: 1px solid transparent;
+}
+/* status */
+.s-not_started { background: var(--sleeve); color: var(--graphite); }
+.s-sent { background: var(--sleeve); color: var(--ink); border-color: var(--rule); }
+.s-confirmed { background: color-mix(in srgb, var(--filed) 16%, var(--paper)); color: var(--filed); }
+.s-needs_verification { background: color-mix(in srgb, var(--tab) 18%, var(--paper)); color: var(--tab); }
+.s-rejected { background: color-mix(in srgb, var(--stamp) 14%, var(--paper)); color: var(--stamp); }
+/* exposure */
+.e-unknown { background: var(--sleeve); color: var(--graphite); }
+.e-found { background: color-mix(in srgb, var(--stamp) 16%, var(--paper)); color: var(--stamp); }
+.e-not_found { background: color-mix(in srgb, var(--filed) 16%, var(--paper)); color: var(--filed); }
+.e-possible { background: color-mix(in srgb, var(--tab) 18%, var(--paper)); color: var(--tab); }
+.e-unreachable { background: transparent; color: var(--graphite); border-style: dashed; border-color: var(--rule); }
+.e-assumed { background: transparent; color: var(--graphite); border-color: var(--rule); }
+.e-likely { background: transparent; color: var(--stamp); border-style: dashed; border-color: color-mix(in srgb, var(--stamp) 40%, transparent); }
+
+.difficulty { letter-spacing: 1px; color: var(--graphite); }
+
+/* ---- filters / forms ---- */
+.filters {
+    display: flex;
+    gap: var(--space-3);
+    align-items: end;
+    flex-wrap: wrap;
+    margin: var(--space-3) 0 var(--space-4);
+}
+label { display: flex; flex-direction: column; gap: 5px; font-size: 0.82rem; color: var(--graphite); }
+select, input[type="text"], input[type="search"] {
+    background: var(--paper);
+    color: var(--ink);
+    border: 1px solid var(--rule);
+    border-radius: var(--radius-sm);
+    padding: 7px 10px;
+    font: 0.88rem var(--font-body);
+}
+button, .btn {
+    background: var(--ink);
+    color: var(--paper);
+    border: none;
+    border-radius: var(--radius-sm);
+    padding: 9px 16px;
+    font: 700 0.85rem var(--font-body);
+    cursor: pointer;
+}
+button:hover, .btn:hover { background: color-mix(in srgb, var(--ink) 85%, var(--stamp)); }
+.btn-secondary {
+    background: transparent;
+    color: var(--ink);
+    border: 1px solid var(--rule);
+}
+.btn-secondary:hover { background: var(--sleeve); }
+
+/* ---- broker detail ---- */
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: var(--space-6); }
+dl { display: grid; grid-template-columns: max-content 1fr; gap: 6px var(--space-4); margin: 0; }
+dt { color: var(--graphite); font-size: 0.85rem; }
+dd { margin: 0; word-break: break-word; }
+.history { list-style: none; padding: 0; margin: 0; }
+.history li { margin: var(--space-2) 0; font-size: 0.88rem; }
+
+.letter {
+    background: var(--paper);
+    border: 1px solid var(--rule);
+    border-radius: var(--radius-sm);
+    padding: var(--space-4);
+    font: 13px/1.6 var(--font-mono);
+    white-space: pre-wrap;
+    position: relative;
+}
+.letter-tag {
+    display: inline-block;
+    font: 700 12px var(--font-mono);
+    border: 1.5px solid var(--stamp);
+    color: var(--stamp);
+    padding: 2px 8px;
+    border-radius: 2px;
+    transform: rotate(-2deg);
+    letter-spacing: 0.04em;
+}
+.actions { display: flex; gap: var(--space-3); margin: var(--space-3) 0; flex-wrap: wrap; }
+
+/* ---- responsive tables -> cards ---- */
+@media (max-width: 720px) {
+    .grid { grid-template-columns: 1fr; }
+    table thead { display: none; }
+    table, table tbody, table tr, table td { display: block; width: 100%; }
+    table tr {
+        border: 1px solid var(--rule);
+        border-radius: var(--radius-sm);
+        margin: var(--space-3) 0;
+        padding: var(--space-2) var(--space-3);
+    }
+    table td {
+        border: none;
+        padding: 4px 0;
+        display: flex;
+        justify-content: space-between;
+        gap: var(--space-3);
+    }
+    table td::before {
+        content: attr(data-label);
+        color: var(--graphite);
+        font-size: 0.72rem;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        font-weight: 700;
+    }
+    .mockup-bar-inner { flex-direction: column; align-items: stretch; }
+    .tabs { margin-left: 0; }
+}
+
+.view { display: none; }
+.view.active { display: block; }
+</style>
+</head>
+<body>
+
+<div class="mockup-bar">
+    <div class="mockup-bar-inner">
+        <span><strong>Scrubbr UI mockup</strong> — design review, not the live app</span>
+        <div class="tabs" role="tablist" aria-label="Preview page">
+            <button data-view="dashboard" aria-current="true">Dashboard</button>
+            <button data-view="brokers" aria-current="false">Brokers</button>
+            <button data-view="detail" aria-current="false">Broker detail</button>
+        </div>
+        <button class="theme-toggle" id="theme-toggle" type="button">Toggle theme</button>
+    </div>
+</div>
+
+<header>
+    <nav>
+        <a class="brand" href="#">Scrubbr</a>
+        <a class="navlink" href="#" aria-current="page">Dashboard</a>
+        <a class="navlink" href="#">Brokers</a>
+        <a class="navlink" href="#">Scan</a>
+        <a class="navlink" href="#">Review</a>
+        <a class="navlink" href="#">Profiles</a>
+    </nav>
+</header>
+
+<main>
+
+<!-- ================= DASHBOARD ================= -->
+<section class="view active" id="view-dashboard">
+<h1>Dashboard</h1>
+
+<section class="meter">
+    <div class="meter-head">
+        <span class="label">Your public record</span>
+        <span class="total">130 brokers</span>
+    </div>
+    <div class="meter-bar" role="img" aria-label="47 redacted, 22 filed, 61 still listed, out of 130 brokers">
+        <span class="seg redacted" style="width:36.2%"></span>
+        <span class="seg filed" style="width:16.9%"></span>
+        <span class="seg listed" style="width:46.9%"></span>
+    </div>
+    <div class="meter-legend">
+        <span><i class="dot redacted"></i>47 redacted</span>
+        <span><i class="dot filed"></i>22 filed</span>
+        <span><i class="dot listed"></i><span class="listed-count">61</span> still listed</span>
+    </div>
+</section>
+
+<div class="banner">
+    <strong>3 to review</strong> — replies the classifier couldn't confidently match.
+    <a href="#">Open review queue &rarr;</a>
+</div>
+
+<h2>Due for follow-up</h2>
+<ul class="history">
+    <li><a href="#">Whitepages</a> <span class="muted">due 2026-07-20 &middot; overdue</span></li>
+    <li><a href="#">Acxiom</a> <span class="muted">due 2026-08-01</span></li>
+</ul>
+
+<h2>All brokers</h2>
+<div class="table-wrap">
+<table>
+    <thead><tr>
+        <th><a class="sort active" href="#">Broker <span class="sort-arrow">▾</span></a></th>
+        <th>Category</th><th>Exposure</th><th>Status</th><th>Next due</th>
+    </tr></thead>
+    <tbody>
+        <tr><td data-label="Broker"><a href="#">Whitepages</a></td><td data-label="Category" class="muted">people-search</td><td data-label="Exposure"><span class="badge e-found">Found</span></td><td data-label="Status"><span class="badge s-sent">Sent</span></td><td data-label="Next due" class="muted">2026-07-20</td></tr>
+        <tr><td data-label="Broker"><a href="#">Radaris</a></td><td data-label="Category" class="muted">people-search</td><td data-label="Exposure"><span class="badge e-found">Found</span></td><td data-label="Status"><span class="badge s-confirmed">Confirmed</span></td><td data-label="Next due" class="muted">&mdash;</td></tr>
+        <tr><td data-label="Broker"><a href="#">FastPeopleSearch</a></td><td data-label="Category" class="muted">people-search</td><td data-label="Exposure"><span class="badge e-found">Found</span></td><td data-label="Status"><span class="badge s-needs_verification">Needs verification</span></td><td data-label="Next due" class="muted">&mdash;</td></tr>
+        <tr><td data-label="Broker"><a href="#">TruePeopleSearch</a></td><td data-label="Category" class="muted">people-search</td><td data-label="Exposure"><span class="badge e-not_found">Not found</span></td><td data-label="Status"><span class="badge s-not_started">Not started</span></td><td data-label="Next due" class="muted">&mdash;</td></tr>
+        <tr><td data-label="Broker"><a href="#">That'sThem</a></td><td data-label="Category" class="muted">people-search</td><td data-label="Exposure"><span class="badge e-possible">Possible match &mdash; review</span></td><td data-label="Status"><span class="badge s-sent">Sent</span></td><td data-label="Next due" class="muted">2026-09-02</td></tr>
+        <tr><td data-label="Broker"><a href="#">Spokeo</a></td><td data-label="Category" class="muted">people-search</td><td data-label="Exposure"><span class="badge e-found">Found</span></td><td data-label="Status"><span class="badge s-rejected">Rejected</span></td><td data-label="Next due" class="muted">&mdash;</td></tr>
+        <tr><td data-label="Broker"><a href="#">BeenVerified</a></td><td data-label="Category" class="muted">people-search</td><td data-label="Exposure"><span class="badge e-likely">Likely exposed</span></td><td data-label="Status"><span class="badge s-not_started">Not started</span></td><td data-label="Next due" class="muted">&mdash;</td></tr>
+        <tr><td data-label="Broker"><a href="#">Acxiom</a></td><td data-label="Category" class="muted">marketing</td><td data-label="Exposure"><span class="badge e-assumed">Assumed exposed</span></td><td data-label="Status"><span class="badge s-sent">Sent</span></td><td data-label="Next due" class="muted">2026-08-01</td></tr>
+        <tr><td data-label="Broker"><a href="#">LexisNexis Risk Solutions</a></td><td data-label="Category" class="muted">risk</td><td data-label="Exposure"><span class="badge e-unknown">Unknown</span></td><td data-label="Status"><span class="badge s-not_started">Not started</span></td><td data-label="Next due" class="muted">&mdash;</td></tr>
+        <tr><td data-label="Broker"><a href="#">CheckR</a></td><td data-label="Category" class="muted">recruitment</td><td data-label="Exposure"><span class="badge e-not_found">Not found</span></td><td data-label="Status"><span class="badge s-not_started">Not started</span></td><td data-label="Next due" class="muted">&mdash;</td></tr>
+    </tbody>
+</table>
+</div>
+</section>
+
+<!-- ================= BROKERS ================= -->
+<section class="view" id="view-brokers">
+<h1>Broker directory</h1>
+
+<form class="filters" onsubmit="return false">
+    <label>Search <input type="search" id="broker-search" placeholder="Broker name&hellip;"></label>
+    <label>Category
+        <select><option>All</option><option>people-search</option><option>marketing</option><option>risk</option><option>recruitment</option></select>
+    </label>
+    <label>Status
+        <select><option>All</option><option>Sent</option><option>Confirmed</option><option>Rejected</option></select>
+    </label>
+    <label>Exposure
+        <select><option>All</option><option>Found</option><option>Not found</option></select>
+    </label>
+</form>
+
+<p class="muted" id="broker-count">10 broker(s)</p>
+
+<div class="table-wrap">
+<table id="broker-table">
+    <thead><tr>
+        <th><a class="sort active" href="#">Broker <span class="sort-arrow">▾</span></a></th>
+        <th>Category</th><th>Method</th><th>Difficulty</th><th>Exposure</th><th>Status</th>
+    </tr></thead>
+    <tbody>
+        <tr><td data-label="Broker"><a href="#">Whitepages</a></td><td data-label="Category" class="muted">people-search</td><td data-label="Method" class="muted">form</td><td data-label="Difficulty" class="difficulty">&bull;&bull;</td><td data-label="Exposure"><span class="badge e-found">Found</span></td><td data-label="Status"><span class="badge s-sent">Sent</span></td></tr>
+        <tr><td data-label="Broker"><a href="#">Radaris</a></td><td data-label="Category" class="muted">people-search</td><td data-label="Method" class="muted">form</td><td data-label="Difficulty" class="difficulty">&bull;&bull;&bull;</td><td data-label="Exposure"><span class="badge e-found">Found</span></td><td data-label="Status"><span class="badge s-confirmed">Confirmed</span></td></tr>
+        <tr><td data-label="Broker"><a href="#">FastPeopleSearch</a></td><td data-label="Category" class="muted">people-search</td><td data-label="Method" class="muted">email</td><td data-label="Difficulty" class="difficulty">&bull;</td><td data-label="Exposure"><span class="badge e-found">Found</span></td><td data-label="Status"><span class="badge s-needs_verification">Needs verification</span></td></tr>
+        <tr><td data-label="Broker"><a href="#">TruePeopleSearch</a></td><td data-label="Category" class="muted">people-search</td><td data-label="Method" class="muted">email</td><td data-label="Difficulty" class="difficulty">&bull;</td><td data-label="Exposure"><span class="badge e-not_found">Not found</span></td><td data-label="Status"><span class="badge s-not_started">Not started</span></td></tr>
+        <tr><td data-label="Broker"><a href="#">That'sThem</a></td><td data-label="Category" class="muted">people-search</td><td data-label="Method" class="muted">email</td><td data-label="Difficulty" class="difficulty">&bull;&bull;</td><td data-label="Exposure"><span class="badge e-possible">Possible match &mdash; review</span></td><td data-label="Status"><span class="badge s-sent">Sent</span></td></tr>
+        <tr><td data-label="Broker"><a href="#">Spokeo</a></td><td data-label="Category" class="muted">people-search</td><td data-label="Method" class="muted">form</td><td data-label="Difficulty" class="difficulty">&bull;&bull;&bull;</td><td data-label="Exposure"><span class="badge e-found">Found</span></td><td data-label="Status"><span class="badge s-rejected">Rejected</span></td></tr>
+        <tr><td data-label="Broker"><a href="#">BeenVerified</a></td><td data-label="Category" class="muted">people-search</td><td data-label="Method" class="muted">form</td><td data-label="Difficulty" class="difficulty">&bull;&bull;</td><td data-label="Exposure"><span class="badge e-likely">Likely exposed</span></td><td data-label="Status"><span class="badge s-not_started">Not started</span></td></tr>
+        <tr><td data-label="Broker"><a href="#">Acxiom</a></td><td data-label="Category" class="muted">marketing</td><td data-label="Method" class="muted">email</td><td data-label="Difficulty" class="difficulty">&bull;</td><td data-label="Exposure"><span class="badge e-assumed">Assumed exposed</span></td><td data-label="Status"><span class="badge s-sent">Sent</span></td></tr>
+        <tr><td data-label="Broker"><a href="#">LexisNexis Risk Solutions</a></td><td data-label="Category" class="muted">risk</td><td data-label="Method" class="muted">form</td><td data-label="Difficulty" class="difficulty">&bull;&bull;&bull;</td><td data-label="Exposure"><span class="badge e-unknown">Unknown</span></td><td data-label="Status"><span class="badge s-not_started">Not started</span></td></tr>
+        <tr><td data-label="Broker"><a href="#">CheckR</a></td><td data-label="Category" class="muted">recruitment</td><td data-label="Method" class="muted">email</td><td data-label="Difficulty" class="difficulty">&bull;</td><td data-label="Exposure"><span class="badge e-not_found">Not found</span></td><td data-label="Status"><span class="badge s-not_started">Not started</span></td></tr>
+    </tbody>
+</table>
+</div>
+</section>
+
+<!-- ================= BROKER DETAIL ================= -->
+<section class="view" id="view-detail">
+<p><a href="#">&larr; All brokers</a></p>
+<h1>Whitepages</h1>
+
+<h2>Broker info</h2>
+<dl>
+    <dt>Category</dt><dd>people-search</dd>
+    <dt>Contact method</dt><dd>form</dd>
+    <dt>Legal basis</dt><dd>US</dd>
+    <dt>Difficulty</dt><dd class="difficulty">&bull;&bull; (2/3)</dd>
+    <dt>Opt-out page</dt><dd><a href="#">whitepages.com/suppression-requests</a></dd>
+</dl>
+
+<h2>James &middot; Removal request <span class="badge s-sent">Sent</span> <span class="badge e-found">Found</span></h2>
+
+<div class="grid">
+    <div>
+        <p class="muted">Last sent 2026-06-10 &middot; next due 2026-07-20</p>
+        <h3>History</h3>
+        <ul class="history">
+            <li><span class="badge s-sent">Sent</span> <span class="muted">2026-06-10</span></li>
+            <li><span class="badge s-needs_verification">Needs verification</span> <span class="muted">2026-06-25</span> &mdash; requested last 4 of SSN</li>
+        </ul>
+    </div>
+    <div>
+        <p>Send this email to <strong>privacy@whitepages.com</strong>. The subject includes a tag so inbox monitoring can match the reply &mdash; keep it intact.</p>
+        <div class="actions">
+            <button class="btn" type="button">Open in mail client</button>
+            <button class="btn-secondary" type="button">Copy email text</button>
+        </div>
+        <p class="field"><strong>Subject:</strong> Data deletion request <span class="letter-tag">PIR-42</span></p>
+        <div class="letter">To the Privacy Office at Whitepages,
+
+Under applicable state privacy law, I am requesting the deletion of
+all personal information you have collected about me, including but
+not limited to my name, address history, phone numbers, and any
+associated profile or listing.
+
+Name: James Skowronek
+Address: 10 Beacon St, Boston, MA 02108
+
+Please confirm in writing once this request has been completed.
+
+Sincerely,
+James Skowronek</div>
+    </div>
+</div>
+</section>
+
+</main>
+
+<footer>
+    <p>Runs entirely on your machine. Requests carry legal weight because you are
+    the data subject &mdash; no authorized-agent paperwork needed.</p>
+</footer>
+
+<script>
+var tabs = document.querySelectorAll(".tabs button");
+tabs.forEach(function (btn) {
+    btn.addEventListener("click", function () {
+        tabs.forEach(function (b) { b.setAttribute("aria-current", "false"); });
+        btn.setAttribute("aria-current", "true");
+        document.querySelectorAll(".view").forEach(function (v) { v.classList.remove("active"); });
+        document.getElementById("view-" + btn.dataset.view).classList.add("active");
+    });
+});
+
+var themeBtn = document.getElementById("theme-toggle");
+themeBtn.addEventListener("click", function () {
+    var current = document.documentElement.getAttribute("data-theme") ||
+        (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+    var next = current === "dark" ? "light" : "dark";
+    document.documentElement.setAttribute("data-theme", next);
+    localStorage.setItem("scrubbr-theme", next);
+});
+
+var search = document.getElementById("broker-search");
+var rows = document.querySelectorAll("#broker-table tbody tr");
+var count = document.getElementById("broker-count");
+search.addEventListener("input", function () {
+    var q = search.value.trim().toLowerCase();
+    var visible = 0;
+    rows.forEach(function (r) {
+        var name = r.querySelector("a").textContent.toLowerCase();
+        var show = name.indexOf(q) !== -1;
+        r.style.display = show ? "" : "none";
+        if (show) visible++;
+    });
+    count.textContent = visible + " broker(s)";
+});
+</script>
+</body>
+</html>

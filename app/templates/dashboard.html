@@ -28,13 +28,24 @@
 </form>
 {% endif %}
 
-<section class="stats">
-    <div class="stat"><span class="num">{{ total }}</span><span class="lbl">Brokers</span></div>
-    <div class="stat"><span class="num">{{ counts.get('sent', 0) }}</span><span class="lbl">Sent</span></div>
-    <div class="stat good"><span class="num">{{ counts.get('confirmed', 0) }}</span><span class="lbl">Confirmed</span></div>
-    <div class="stat warn"><span class="num">{{ counts.get('needs_verification', 0) }}</span><span class="lbl">Needs verification</span></div>
-    <div class="stat bad"><span class="num">{{ counts.get('rejected', 0) }}</span><span class="lbl">Rejected</span></div>
-    <div class="stat"><span class="num">{{ counts.get('not_started', 0) }}</span><span class="lbl">Not started</span></div>
+{% set redacted = counts.get('confirmed', 0) %}
+{% set filed = counts.get('sent', 0) + counts.get('needs_verification', 0) %}
+{% set listed = [total - redacted - filed, 0] | max %}
+<section class="meter">
+    <div class="meter-head">
+        <span class="label">Your public record</span>
+        <span class="total">{{ total }} broker{{ 's' if total != 1 }}</span>
+    </div>
+    <div class="meter-bar" role="img" aria-label="{{ redacted }} redacted, {{ filed }} filed, {{ listed }} still listed, out of {{ total }} brokers">
+        <span class="seg redacted" style="width: {{ (redacted / total * 100) if total else 0 }}%"></span>
+        <span class="seg filed" style="width: {{ (filed / total * 100) if total else 0 }}%"></span>
+        <span class="seg listed" style="width: {{ (listed / total * 100) if total else 0 }}%"></span>
+    </div>
+    <div class="meter-legend">
+        <span><i class="dot redacted"></i>{{ redacted }} redacted</span>
+        <span><i class="dot filed"></i>{{ filed }} filed</span>
+        <span><i class="dot listed"></i><span class="listed-count">{{ listed }}</span> still listed</span>
+    </div>
 </section>
 
 <section class="inbox-bar">
@@ -70,20 +81,22 @@
     <p class="muted">Showing all brokers &mdash;
         <a href="/?profile_id={{ selected_profile }}{% if sort %}&sort={{ sort }}&dir={{ dir }}{% endif %}">hide not-found</a></p>
     {% endif %}
+    <div class="table-wrap">
     <table>
         <thead><tr>{{ sort_th('broker', 'Broker', sort, dir) }}{% if multi_profile %}{{ sort_th('profile', 'Profile', sort, dir) }}{% endif %}{{ sort_th('category', 'Category', sort, dir) }}{{ sort_th('exposure', 'Exposure', sort, dir) }}{{ sort_th('status', 'Status', sort, dir) }}{{ sort_th('next_due', 'Next due', sort, dir) }}</tr></thead>
         <tbody>
         {% for broker, profile, r, exposure in rows %}
             <tr>
-                <td><a href="/broker/{{ broker.id }}?profile_id={{ profile.id }}">{{ broker.name }}</a></td>
-                {% if multi_profile %}<td class="muted">{{ profile.name }}</td>{% endif %}
-                <td class="muted">{{ broker.category }}</td>
-                <td>{{ exposure_badge(exposure, broker.id, profile.id) }}</td>
-                <td>{{ status_badge(r.status, broker.id, profile.id) }}</td>
-                <td class="muted">{{ r.next_due or "&mdash;" | safe }}</td>
+                <td data-label="Broker"><a href="/broker/{{ broker.id }}?profile_id={{ profile.id }}">{{ broker.name }}</a></td>
+                {% if multi_profile %}<td data-label="Profile" class="muted">{{ profile.name }}</td>{% endif %}
+                <td data-label="Category" class="muted">{{ broker.category }}</td>
+                <td data-label="Exposure">{{ exposure_badge(exposure, broker.id, profile.id) }}</td>
+                <td data-label="Status">{{ status_badge(r.status, broker.id, profile.id) }}</td>
+                <td data-label="Next due" class="muted">{{ r.next_due or "&mdash;" | safe }}</td>
             </tr>
         {% endfor %}
         </tbody>
     </table>
+    </div>
 </section>
 {% endblock %}

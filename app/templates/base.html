@@ -4,20 +4,30 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{% block title %}Scrubbr{% endblock %}</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='2' fill='%23161a13'/%3E%3Crect x='3' y='6' width='10' height='4' rx='1' fill='%23efefea'/%3E%3C/svg%3E">
+    <script>
+    // No-flash theme init: apply a stored preference before first paint.
+    (function () {
+        var saved = localStorage.getItem("scrubbr-theme");
+        if (saved) document.documentElement.setAttribute("data-theme", saved);
+    })();
+    </script>
     <link rel="stylesheet" href="/static/style.css?v={{ asset_version() }}">
 </head>
 <body>
 <header>
     <nav>
         <a class="brand" href="/">Scrubbr</a>
-        <a href="/">Dashboard</a>
-        <a href="/brokers">Brokers</a>
-        <a href="/scan">Scan</a>
-        <a href="/review">Review{% block reviewbadge %}{% endblock %}</a>
-        <a href="/profiles">Profiles</a>
+        <a class="navlink" href="/" {% if request.url.path == '/' %}aria-current="page"{% endif %}>Dashboard</a>
+        <a class="navlink" href="/brokers" {% if request.url.path.startswith('/broker') %}aria-current="page"{% endif %}>Brokers</a>
+        <a class="navlink" href="/scan" {% if request.url.path == '/scan' %}aria-current="page"{% endif %}>Scan</a>
+        <a class="navlink" href="/review" {% if request.url.path == '/review' %}aria-current="page"{% endif %}>Review{% block reviewbadge %}{% endblock %}</a>
+        <a class="navlink" href="/profiles" {% if request.url.path.startswith('/profile') %}aria-current="page"{% endif %}>Profiles</a>
+        <button class="theme-toggle" id="theme-toggle" type="button">Switch theme</button>
     </nav>
 </header>
 <main>
+    {% include "_flash.html" %}
     {% block body %}{% endblock %}
 </main>
 <footer>
@@ -32,6 +42,14 @@ document.addEventListener("toggle", (e) => {
         if (d !== e.target) d.open = false;
     });
 }, true);
+
+document.getElementById("theme-toggle").addEventListener("click", () => {
+    const current = document.documentElement.getAttribute("data-theme") ||
+        (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+    const next = current === "dark" ? "light" : "dark";
+    document.documentElement.setAttribute("data-theme", next);
+    localStorage.setItem("scrubbr-theme", next);
+});
 </script>
 </body>
 </html>

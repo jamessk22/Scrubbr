@@ -84,7 +84,7 @@
             </details>
             {% else %}
             <p>Send this email to <strong>{{ broker.opt_out_email or "the broker's privacy contact" }}</strong>.
-               The subject includes the tag <code>[{{ e.rendered.tag }}]</code> so inbox monitoring can match the reply &mdash; keep it intact.</p>
+               The subject includes the tag <span class="stamp">{{ e.rendered.tag }}</span> so inbox monitoring can match the reply &mdash; keep it intact.</p>
             <div class="actions">
                 {% if e.mailto %}<a class="btn" href="{{ e.mailto }}">Open in mail client</a>{% endif %}
                 <button class="btn" type="button" onclick="copyRequest({{ loop.index }})">Copy email text</button>

@@ -46,17 +46,18 @@ Requests go straight from this machine to the broker, at a slow, human-like pace
     {% for status, rows in groups %}
     <h3 class="group-head"><span class="badge e-{{ status }}">{{ EXPOSURE_LABELS[status] }}</span>
         <span class="muted">{{ rows|length }} broker(s)</span></h3>
+    <div class="table-wrap">
     <table>
-        <thead><tr>{{ sort_th('broker', 'Broker', sort, dir) }}<th>Exposure</th><th></th></tr></thead>
+        <thead><tr>{{ sort_th('broker', 'Broker', sort, dir) }}<th>Exposure</th><th>Actions</th></tr></thead>
         <tbody>
         {% for row in rows %}
             <tr>
-                <td><a href="/broker/{{ row.broker.id }}?profile_id={{ profile.id }}">{{ row.broker.name }}</a></td>
-                <td>
+                <td data-label="Broker"><a href="/broker/{{ row.broker.id }}?profile_id={{ profile.id }}">{{ row.broker.name }}</a></td>
+                <td data-label="Exposure">
                     {{ exposure_badge(row.status, row.broker.id, profile.id,
                                        source=row.source, likely_via=row.likely_via) }}
                 </td>
-                <td>
+                <td data-label="Actions">
                     {% if not row.manual_only %}
                     <form method="post" action="/scan/{{ row.broker.id }}/auto">
                         <input type="hidden" name="profile_id" value="{{ profile.id }}">
@@ -123,6 +124,7 @@ Requests go straight from this machine to the broker, at a slow, human-like pace
         {% endfor %}
         </tbody>
     </table>
+    </div>
     {% endfor %}
 </section>
 {% endif %}
@@ -146,14 +148,15 @@ Requests go straight from this machine to the broker, at a slow, human-like pace
     <p class="muted">These brokers have no public search page, so there is no way to verify a listing
     automatically &mdash; set each one's exposure by hand here. They stay active and should still
     receive removal requests.</p>
+    <div class="table-wrap">
     <table>
         <thead><tr>{{ sort_th('broker', 'Broker', asort, adir, param='asort', dirparam='adir') }}{{ sort_th('category', 'Category', asort, adir, param='asort', dirparam='adir') }}{{ sort_th('exposure', 'Exposure', asort, adir, param='asort', dirparam='adir') }}</tr></thead>
         <tbody>
         {% for row in assumed %}
             <tr>
-                <td><a href="/broker/{{ row.broker.id }}?profile_id={{ profile.id }}">{{ row.broker.name }}</a></td>
-                <td class="muted">{{ row.broker.category }}</td>
-                <td>
+                <td data-label="Broker"><a href="/broker/{{ row.broker.id }}?profile_id={{ profile.id }}">{{ row.broker.name }}</a></td>
+                <td data-label="Category" class="muted">{{ row.broker.category }}</td>
+                <td data-label="Exposure">
                     {{ exposure_badge(row.status, row.broker.id, profile.id,
                                       source=row.source, likely_via=row.likely_via) }}
                 </td>
@@ -161,6 +164,7 @@ Requests go straight from this machine to the broker, at a slow, human-like pace
         {% endfor %}
         </tbody>
     </table>
+    </div>
 </section>
 
 {% if bulk and bulk.running %}

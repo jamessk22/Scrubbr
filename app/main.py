@@ -161,7 +161,7 @@ def dashboard(request: HttpRequest, profile_id: str = "", show_all: str = "", so
 @app.get("/brokers", response_class=HTMLResponse)
 def broker_list(request: HttpRequest, category: str = "", status: str = "",
                 exposure: str = "", profile_id: str = "", show_all: str = "",
-                sort: str = "", dir: str = ""):
+                name: str = "", sort: str = "", dir: str = ""):
     conn = get_conn()
     try:
         profiles = db.all_profiles(conn)
@@ -176,6 +176,8 @@ def broker_list(request: HttpRequest, category: str = "", status: str = "",
         hidden = 0
         for b in brokers:
             if category and b.category != category:
+                continue
+            if name and name.lower() not in b.name.lower():
                 continue
             for p in scope:
                 r = requests[p.id][b.id]
@@ -202,6 +204,7 @@ def broker_list(request: HttpRequest, category: str = "", status: str = "",
         return views.TemplateResponse("brokers.html", {
             "request": request, "rows": rows, "categories": categories,
             "sel_category": category, "sel_status": status, "sel_exposure": exposure,
+            "sel_name": name,
             "hidden": hidden, "show_all": bool(show_all),
             "statuses": STATUS_LABELS,
             "profiles": profiles, "selected_profile": selected, "multi_profile": len(profiles) > 1,
@@ -556,7 +559,7 @@ def review_page(request: HttpRequest):
             enriched.append({**m, "broker": broker, "profile": profile})
         return views.TemplateResponse("review.html", {
             "request": request, "items": enriched, "statuses": STATUS_LABELS,
-            "profiles": profiles,
+            "profiles": profiles, "brokers": db.all_brokers(conn),
         })
     finally:
         conn.close()
