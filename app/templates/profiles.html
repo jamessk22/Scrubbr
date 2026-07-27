@@ -9,15 +9,16 @@ generated for one profile, or all of them, from a broker's page.</p>
 {% if not profiles %}
 <div class="banner warn">No profiles yet &mdash; add one to start generating removal requests.</div>
 {% else %}
+<div class="table-wrap">
 <table>
     <thead><tr>{{ sort_th('label', 'Label', sort, dir) }}{{ sort_th('full_name', 'Full name', sort, dir) }}{{ sort_th('state', 'State', sort, dir) }}<th></th></tr></thead>
     <tbody>
     {% for p in profiles %}
         <tr>
-            <td>{{ p.name }}</td>
-            <td class="muted">{{ p.full_name or "&mdash;" | safe }}</td>
-            <td class="muted">{{ p.state or "&mdash;" | safe }}</td>
-            <td>
+            <td data-label="Label">{{ p.name }}</td>
+            <td data-label="Full name" class="muted">{{ p.full_name or "&mdash;" | safe }}</td>
+            <td data-label="State" class="muted">{{ p.state or "&mdash;" | safe }}</td>
+            <td data-label="Actions">
                 <a href="/profiles/{{ p.id }}/edit">Edit</a>
                 <form method="post" action="/profiles/{{ p.id }}/delete" style="display:inline"
                       onsubmit="return confirm('Delete {{ p.name }}? This also removes all of its tracked requests.')">
@@ -28,6 +29,7 @@ generated for one profile, or all of them, from a broker's page.</p>
     {% endfor %}
     </tbody>
 </table>
+</div>
 {% endif %}
 
 <p><a class="btn" href="/profiles/new">Add profile</a></p>
