@@ -1,0 +1,126 @@
+{% extends "base.html" %}
+{% from "_badges.html" import exposure_badge with context %}
+{% from "_sort.html" import sort_th with context %}
+{% block title %}Send &middot; Scrubbr{% endblock %}
+{% block body %}
+<h1>Send requests</h1>
+<p class="muted">Sends initial removal requests to every eligible email-capable broker below. Follow-up
+re-sends and form-only brokers stay a manual click from the broker list.</p>
+
+{% if multi_profile %}
+<form class="filters" method="get" action="/send">
+    {% if sort %}<input type="hidden" name="sort" value="{{ sort }}"><input type="hidden" name="dir" value="{{ dir }}">{% endif %}
+    <label>Profile
+        <select name="profile_id" onchange="this.form.submit()">
+            {% for p in profiles %}
+            <option value="{{ p.id }}" {% if p.id == profile.id %}selected{% endif %}>{{ p.name }}</option>
+            {% endfor %}
+        </select>
+    </label>
+    <noscript><button type="submit">Go</button></noscript>
+</form>
+{% endif %}
+
+{% if not smtp_enabled %}
+<div class="banner warn">SMTP is disabled &mdash; enable <code>[smtp]</code> in config.toml to send automatically.</div>
+{% endif %}
+{% if not profile.full_name %}
+<div class="banner warn">
+    <a href="/profiles/{{ profile.id }}/edit">{{ profile.name }}'s profile</a> needs a full name before
+    the generated requests can identify you.
+</div>
+{% endif %}
+{% if not from_addr_ok %}
+<div class="banner warn">
+    The configured <code>smtp.from_addr</code> isn't one of {{ profile.name }}'s emails &mdash; some
+    brokers only honor requests from an address already on record.
+</div>
+{% endif %}
+{% if bulk and bulk.error %}
+<div class="banner warn">Send run failed: {{ bulk.error }}</div>
+{% endif %}
+
+<section>
+    <!-- exposure_badge() below renders its own per-row <form>, so this bulk-action
+    form must not physically wrap the table -- nested <form> elements are invalid
+    HTML and get silently corrected by the browser (the first nested form's start
+    tag is dropped and its later </form> closes this one early instead), which
+    breaks both the layout and which checkboxes actually submit. Every checkbox
+    and button below points at this form by id instead. -->
+    <form id="send-all-form" method="post" action="/send/all">
+        <input type="hidden" name="profile_id" value="{{ profile.id }}">
+    </form>
+    <div class="table-wrap">
+    <table>
+        <thead><tr>
+            <th></th>
+            {{ sort_th('broker', 'Broker', sort, dir) }}
+            <th>Opt-out email</th>
+            {{ sort_th('category', 'Category', sort, dir) }}
+            {{ sort_th('exposure', 'Exposure', sort, dir) }}
+            {{ sort_th('result', 'Result', sort, dir) }}
+        </tr></thead>
+        <tbody>
+        {% for b in eligible %}
+            <tr>
+                <td><input type="checkbox" name="broker_ids" value="{{ b.id }}" form="send-all-form" checked
+                           {% if bulk and bulk.running %}disabled{% endif %}></td>
+                <td data-label="Broker"><a href="/broker/{{ b.id }}?profile_id={{ profile.id }}">{{ b.name }}</a></td>
+                <td data-label="Opt-out email" class="muted">{{ b.opt_out_email }}</td>
+                <td data-label="Category" class="muted">{{ b.category }}</td>
+                <td data-label="Exposure">{{ exposure_badge(exposure_of(b), b.id, profile.id) }}</td>
+                <td data-label="Result" id="send-{{ b.id }}">
+                    {% if bulk and bulk.results.get(b.id) %}{{ bulk.results[b.id].status }}{% endif %}
+                </td>
+            </tr>
+        {% else %}
+            <tr><td colspan="6" class="muted">No brokers are eligible for an automatic send right now.</td></tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    </div>
+    <div class="actions">
+        <button type="submit" form="send-all-form" name="mode" value="dry_run"
+                {% if not smtp_enabled or not eligible or (bulk and bulk.running) %}disabled{% endif %}>
+            Preview (no email sent)
+        </button>
+        <button type="submit" form="send-all-form" name="mode" value="send"
+                onclick="return confirm('Send real emails to the selected brokers?')"
+                {% if not smtp_enabled or not eligible or (bulk and bulk.running) %}disabled{% endif %}>
+            Send for real
+        </button>
+        <span class="muted" id="send-progress">
+            {% if bulk and bulk.running %}{{ 'Previewing' if bulk.dry_run else 'Sending' }} {{ bulk.done }} of {{ bulk.total }}&hellip;{% endif %}
+        </span>
+    </div>
+</section>
+
+{% if form_count %}
+<p class="muted">{{ form_count }} broker(s) use a web form and need a manual visit &mdash;
+see the <a href="/brokers?status=not_started">broker list</a>.</p>
+{% endif %}
+
+{% if bulk and bulk.running %}
+<script>
+function pollBulkSend() {
+    fetch('/send/status?profile_id={{ profile.id }}').then(r => r.json()).then(state => {
+        const progress = document.getElementById('send-progress');
+        if (state.total > 0) {
+            progress.textContent = `${state.dry_run ? 'Previewing' : 'Sending'} ${state.done} of ${state.total}…`;
+        }
+        for (const [brokerId, result] of Object.entries(state.results || {})) {
+            const cell = document.getElementById('send-' + brokerId);
+            if (cell) cell.textContent = result.status;
+        }
+        if (state.running) {
+            setTimeout(pollBulkSend, 3000);
+        } else {
+            progress.textContent = (state.dry_run ? 'Preview' : 'Send') + ' complete — reloading…';
+            setTimeout(() => location.reload(), 800);
+        }
+    });
+}
+pollBulkSend();
+</script>
+{% endif %}
+{% endblock %}

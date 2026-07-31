@@ -10,7 +10,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from . import db, fetcher, inbox, ratelimit, scan_service, scanner, sender, templater
+from . import db, fetcher, inbox, ratelimit, scan_service, scanner, send_service, sender, templater
 from .config import ROOT, load_config
 from .models import (
     DRIFT_STREAK_THRESHOLD,
@@ -329,6 +329,7 @@ def scan_page(request: HttpRequest, profile_id: str = "", sort: str = "", dir: s
             snapshot = json.loads(exp.snapshot) if exp and exp.snapshot else None
             searchable.append({
                 "broker": b,
+                "category": b.category,
                 "status": effective_exposure(b, exp, networks),
                 "link": (scanner.build_search_url(b.search_url, ctx) if ctx else "") or "",
                 "snapshot": snapshot,
@@ -342,6 +343,7 @@ def scan_page(request: HttpRequest, profile_id: str = "", sort: str = "", dir: s
         searchable.sort(key=lambda row: row["broker"].name.lower())
         searchable = _sort_rows(searchable, sort, dir, {
             "broker": lambda r: r["broker"].name.casefold(),
+            "category": lambda r: r["category"].casefold(),
         })
         groups = [
             (status, [row for row in searchable if row["status"] == status])
@@ -425,6 +427,138 @@ def scan_status(profile_id: int):
         state = _bulk_scans.get(profile_id)
         if state is None:
             return JSONResponse({"running": False, "total": 0, "done": 0, "results": {}})
+        return JSONResponse({**state, "results": dict(state["results"])})
+
+
+# profile_id -> {"running","total","done","error","results": {broker_id: {...}}}
+_bulk_sends: dict[int, dict] = {}
+_bulk_sends_lock = threading.Lock()
+
+
+def _run_bulk_send(profile_id: int, broker_ids: list[int], dry_run: bool) -> None:
+    conn = get_conn()
+    state = _bulk_sends[profile_id]
+    cfg = load_config()
+    scfg = sender.SmtpConfig.from_dict(cfg)
+    prefix = cfg.get("app", {}).get("request_tag_prefix", "PIR")
+    client = None
+    try:
+        profile = db.get_profile(conn, profile_id)
+        if not dry_run:
+            client = sender.open_smtp(scfg)
+        for i, broker_id in enumerate(broker_ids):
+            result = None
+            try:
+                broker = db.get_broker(conn, broker_id)
+                if broker is None or profile is None:
+                    continue
+                if i:
+                    send_service.pace(scfg)
+                result = send_service.send_and_persist(conn, broker, profile, prefix, scfg, client)
+            except Exception as exc:
+                # One broker's failure must not abandon the rest of the run,
+                # or strand `running: True` forever.
+                result = {"status": "failed", "detail": str(exc)}
+            finally:
+                with _bulk_sends_lock:
+                    if result is not None:
+                        state["results"][broker_id] = result
+                    state["done"] += 1
+    except Exception as exc:
+        # Connection/auth failure: one visible error beats N identical failed rows.
+        with _bulk_sends_lock:
+            state["error"] = str(exc)
+    finally:
+        if client is not None:
+            try:
+                client.quit()
+            except Exception:
+                pass
+        with _bulk_sends_lock:
+            state["running"] = False
+        conn.close()
+
+
+@app.get("/send", response_class=HTMLResponse)
+def send_page(request: HttpRequest, profile_id: str = "", sort: str = "", dir: str = ""):
+    conn = get_conn()
+    try:
+        profiles = db.all_profiles(conn)
+        if not profiles:
+            return RedirectResponse("/profiles", status_code=303)
+        match = [p for p in profiles if str(p.id) == profile_id]
+        profile = match[0] if match else profiles[0]
+        cfg = load_config()
+        smtp_enabled = cfg.get("smtp", {}).get("enabled", False)
+        brokers = db.all_brokers(conn)
+        ids = send_service.eligible_broker_ids(conn, brokers, profile.id)
+        by_id = {b.id: b for b in brokers}
+        eligible = [by_id[i] for i in ids]
+        eligible.sort(key=lambda b: b.name.lower())
+        exposures = db.exposures_for_profile(conn, profile.id)
+        networks = found_networks(brokers, exposures)
+        form_count = len([b for b in brokers if b.contact_method == CONTACT_FORM])
+        from_addr = cfg.get("smtp", {}).get("from_addr") or cfg.get("smtp", {}).get("username", "")
+        bulk = _bulk_sends.get(profile.id)
+        bulk_results = bulk["results"] if bulk else {}
+        eligible = _sort_rows(eligible, sort, dir, {
+            "broker": lambda b: b.name.casefold(),
+            "category": lambda b: b.category.casefold(),
+            "exposure": lambda b: _EXPOSURE_RANK[effective_exposure(b, exposures.get(b.id), networks)],
+            "result": lambda b: bulk_results.get(b.id, {}).get("status"),
+        })
+        return views.TemplateResponse("send.html", {
+            "request": request, "profile": profile, "profiles": profiles,
+            "multi_profile": len(profiles) > 1, "smtp_enabled": smtp_enabled,
+            "eligible": eligible,
+            "exposure_of": lambda b: effective_exposure(b, exposures.get(b.id), networks),
+            "form_count": form_count, "from_addr_ok": not from_addr or from_addr in profile.email_list(),
+            "bulk": bulk,
+            "sort": sort, "dir": dir,
+        })
+    finally:
+        conn.close()
+
+
+@app.post("/send/all")
+def send_all(background_tasks: BackgroundTasks, profile_id: int = Form(...),
+             broker_ids: list[int] = Form([]), mode: str = Form("dry_run")):
+    conn = get_conn()
+    try:
+        cfg = load_config()
+        if not cfg.get("smtp", {}).get("enabled", False):
+            return RedirectResponse("/send?smtp=disabled", status_code=303)
+        dry_run = mode != "send"
+        selected = set(broker_ids)
+        # Never trust posted ids -- re-filter through the same predicate the
+        # page rendered from, so a stale page or hand-made POST can't re-send
+        # an already-sent request or hit a form-only broker.
+        ids = [
+            i for i in send_service.eligible_broker_ids(conn, db.all_brokers(conn), profile_id)
+            if i in selected
+        ]
+        if ids:
+            with _bulk_sends_lock:
+                existing = _bulk_sends.get(profile_id)
+                if not existing or not existing.get("running"):
+                    _bulk_sends[profile_id] = {
+                        "running": True, "total": len(ids), "done": 0,
+                        "error": "", "dry_run": dry_run, "results": {},
+                    }
+                    background_tasks.add_task(_run_bulk_send, profile_id, ids, dry_run)
+        return RedirectResponse(f"/send?profile_id={profile_id}", status_code=303)
+    finally:
+        conn.close()
+
+
+@app.get("/send/status")
+def send_status(profile_id: int):
+    with _bulk_sends_lock:
+        state = _bulk_sends.get(profile_id)
+        if state is None:
+            return JSONResponse({
+                "running": False, "total": 0, "done": 0, "error": "", "dry_run": False, "results": {},
+            })
         return JSONResponse({**state, "results": dict(state["results"])})
 
 

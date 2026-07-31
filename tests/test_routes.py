@@ -1,7 +1,10 @@
+import smtplib
+
 import pytest
+from bs4 import BeautifulSoup
 from fastapi.testclient import TestClient
 
-from app import db, main
+from app import db, main, send_service
 
 
 @pytest.fixture
@@ -210,3 +213,186 @@ def test_scan_status_returns_snapshot_of_running_scan(client, monkeypatch):
     body = resp.json()
     assert body["running"] is True
     assert body["results"] == {str(client.broker_id): {"status": "found", "detail": ""}}
+
+
+class FakeSmtp:
+    def __init__(self, host, port):
+        self.sent = []
+
+    def starttls(self):
+        pass
+
+    def login(self, u, p):
+        pass
+
+    def send_message(self, msg):
+        self.sent.append(msg)
+
+    def quit(self):
+        pass
+
+
+def _seed_email_broker(client, **over):
+    conn = main.get_conn()
+    db.upsert_broker(conn, {
+        "name": "Email Broker", "category": "people-search",
+        "opt_out_email": "privacy@example.test", "contact_method": "both",
+        **over,
+    })
+    conn.commit()
+    broker_id = next(b.id for b in db.all_brokers(conn) if b.name == over.get("name", "Email Broker"))
+    conn.close()
+    return broker_id
+
+
+def _enable_smtp(monkeypatch):
+    monkeypatch.setattr(main, "load_config", lambda: {"smtp": {
+        "enabled": True, "host": "smtp.example.test", "port": 587,
+        "username": "me@example.test", "password": "x",
+    }})
+    monkeypatch.setattr(send_service, "pace", lambda *a, **kw: None)
+
+
+def test_send_page_renders(client):
+    _seed_email_broker(client)
+    resp = client.get("/send", params={"profile_id": client.profile_id})
+    assert resp.status_code == 200
+    assert "Email Broker" in resp.text
+
+
+def test_send_page_has_no_nested_forms(client):
+    """Each row's exposure_badge renders its own <form>. HTML forbids nesting
+    a <form> inside another -- browsers silently drop the inner start tag and
+    close the outer form early at its </form>, corrupting layout and breaking
+    every checkbox after the first row. Regression test for that bug class."""
+    _seed_email_broker(client)
+    resp = client.get("/send", params={"profile_id": client.profile_id})
+    soup = BeautifulSoup(resp.text, "html.parser")
+    for form in soup.find_all("form"):
+        assert form.find("form") is None, "nested <form> found"
+
+    bulk_form = soup.find("form", id="send-all-form")
+    assert bulk_form is not None
+    for checkbox in soup.find_all("input", {"name": "broker_ids"}):
+        assert checkbox.get("form") == "send-all-form"
+
+
+def test_send_page_header_count_matches_row_column_count(client):
+    """thead <th> count must match tbody <td> count per row, or headers land
+    over the wrong column."""
+    _seed_email_broker(client)
+    resp = client.get("/send", params={"profile_id": client.profile_id})
+    soup = BeautifulSoup(resp.text, "html.parser")
+    table = soup.find("table")
+    header_count = len(table.find("thead").find("tr").find_all("th"))
+    row = table.find("tbody").find("tr")
+    assert len(row.find_all("td")) == header_count
+
+
+def test_send_page_sort_by_category_reorders_rows(client, monkeypatch):
+    monkeypatch.setattr(main, "_bulk_sends", {})
+    _seed_email_broker(client, name="Zzz Broker", category="risk")
+    _seed_email_broker(client, name="Aaa Broker", category="marketing")
+
+    resp = client.get("/send", params={"profile_id": client.profile_id, "sort": "category", "dir": "asc"})
+    names = [a.text for a in BeautifulSoup(resp.text, "html.parser").select('td[data-label="Broker"] a')]
+    assert names.index("Aaa Broker") < names.index("Zzz Broker")
+
+    resp = client.get("/send", params={"profile_id": client.profile_id, "sort": "category", "dir": "desc"})
+    names = [a.text for a in BeautifulSoup(resp.text, "html.parser").select('td[data-label="Broker"] a')]
+    assert names.index("Zzz Broker") < names.index("Aaa Broker")
+
+
+def test_send_all_redirects_when_smtp_disabled(client, monkeypatch):
+    monkeypatch.setattr(main, "_bulk_sends", {})
+    broker_id = _seed_email_broker(client)
+    resp = client.post("/send/all", data={
+        "profile_id": client.profile_id, "broker_ids": [broker_id], "mode": "send",
+    }, follow_redirects=False)
+    assert resp.status_code == 303
+    assert resp.headers["location"] == "/send?smtp=disabled"
+
+    req = db.get_or_create_request(main.get_conn(), broker_id, client.profile_id)
+    assert req.status == "not_started"
+
+
+def test_send_all_sends_and_marks_sent(client, monkeypatch):
+    monkeypatch.setattr(main, "_bulk_sends", {})
+    _enable_smtp(monkeypatch)
+    monkeypatch.setattr(smtplib, "SMTP", FakeSmtp)
+    broker_id = _seed_email_broker(client)
+
+    resp = client.post("/send/all", data={
+        "profile_id": client.profile_id, "broker_ids": [broker_id], "mode": "send",
+    }, follow_redirects=False)
+    assert resp.status_code == 303
+
+    conn = main.get_conn()
+    req = db.get_or_create_request(conn, broker_id, client.profile_id)
+    conn.close()
+    assert req.status == "sent"
+
+
+def test_send_all_dry_run_does_not_send_or_mark(client, monkeypatch):
+    monkeypatch.setattr(main, "_bulk_sends", {})
+    _enable_smtp(monkeypatch)
+    opened = []
+    monkeypatch.setattr(smtplib, "SMTP", lambda host, port: opened.append(1) or FakeSmtp(host, port))
+    broker_id = _seed_email_broker(client)
+
+    resp = client.post("/send/all", data={
+        "profile_id": client.profile_id, "broker_ids": [broker_id], "mode": "dry_run",
+    }, follow_redirects=False)
+    assert resp.status_code == 303
+    assert opened == []
+
+    conn = main.get_conn()
+    req = db.get_or_create_request(conn, broker_id, client.profile_id)
+    conn.close()
+    assert req.status == "not_started"
+    assert main._bulk_sends[client.profile_id]["results"][broker_id]["status"] == "dry_run"
+
+
+def test_send_all_ignores_ineligible_broker_ids(client, monkeypatch):
+    monkeypatch.setattr(main, "_bulk_sends", {})
+    _enable_smtp(monkeypatch)
+    monkeypatch.setattr(smtplib, "SMTP", FakeSmtp)
+    form_broker_id = _seed_email_broker(client, name="Form Broker", contact_method="form", opt_out_email="")
+
+    resp = client.post("/send/all", data={
+        "profile_id": client.profile_id, "broker_ids": [form_broker_id], "mode": "send",
+    }, follow_redirects=False)
+    assert resp.status_code == 303
+
+    conn = main.get_conn()
+    req = db.get_or_create_request(conn, form_broker_id, client.profile_id)
+    conn.close()
+    assert req.status == "not_started"
+
+
+def test_send_all_noop_while_running(client, monkeypatch):
+    monkeypatch.setattr(main, "_bulk_sends", {
+        client.profile_id: {"running": True, "total": 1, "done": 0, "error": "", "dry_run": False, "results": {}},
+    })
+    _enable_smtp(monkeypatch)
+    monkeypatch.setattr(smtplib, "SMTP", FakeSmtp)
+    broker_id = _seed_email_broker(client)
+
+    resp = client.post("/send/all", data={
+        "profile_id": client.profile_id, "broker_ids": [broker_id], "mode": "send",
+    }, follow_redirects=False)
+    assert resp.status_code == 303
+
+    conn = main.get_conn()
+    req = db.get_or_create_request(conn, broker_id, client.profile_id)
+    conn.close()
+    assert req.status == "not_started"
+
+
+def test_send_status_returns_empty_state_for_unknown_profile(client, monkeypatch):
+    monkeypatch.setattr(main, "_bulk_sends", {})
+    resp = client.get("/send/status", params={"profile_id": 999999})
+    assert resp.status_code == 200
+    assert resp.json() == {
+        "running": False, "total": 0, "done": 0, "error": "", "dry_run": False, "results": {},
+    }

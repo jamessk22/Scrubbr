@@ -21,6 +21,7 @@
         <a class="navlink" href="/" {% if request.url.path == '/' %}aria-current="page"{% endif %}>Dashboard</a>
         <a class="navlink" href="/brokers" {% if request.url.path.startswith('/broker') %}aria-current="page"{% endif %}>Brokers</a>
         <a class="navlink" href="/scan" {% if request.url.path == '/scan' %}aria-current="page"{% endif %}>Scan</a>
+        <a class="navlink" href="/send" {% if request.url.path == '/send' %}aria-current="page"{% endif %}>Send</a>
         <a class="navlink" href="/review" {% if request.url.path == '/review' %}aria-current="page"{% endif %}>Review{% block reviewbadge %}{% endblock %}</a>
         <a class="navlink" href="/profiles" {% if request.url.path.startswith('/profile') %}aria-current="page"{% endif %}>Profiles</a>
         <button class="theme-toggle" id="theme-toggle" type="button">Switch theme</button>

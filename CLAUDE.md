@@ -6,7 +6,7 @@ Scrubbr is a local, subscription-free reimplementation of Incogni's data-broker
 removal workflow. It generates legal deletion/opt-out requests from your profile, tracks
 per-broker status, and monitors an IMAP mailbox to auto-advance statuses from broker replies.
 Everything runs on your machine; PII never leaves it. See `README.md` for product framing and
-the **v2 roadmap** (SMTP auto-send, Playwright form automation, scheduler, broker-list growth).
+the **v2 roadmap** (Playwright form automation, scheduler, broker-list growth).
 
 ## Commands
 
@@ -49,8 +49,17 @@ framework. `app/main.py` holds every route; the rest of `app/` is a thin layered
   subject tag (`request_tag`); classification advances status, and anything ambiguous or
   unmatched is flagged `needs_review` for the review queue. **Never sends/replies/deletes.**
   Verification demands are checked before confirmations on purpose (safest when a reply has both).
-- **`sender.py`** — delivery seam. v1 only builds `mailto:` links (manual send). This is the
-  designated insertion point for v2 SMTP/Playwright auto-send; keep routes calling through it.
+- **`sender.py`** — delivery seam. Builds `mailto:` links (manual fallback for form brokers) and,
+  for email-capable brokers, sends via SMTP (`SmtpConfig`, `build_message`, `open_smtp`, `send`).
+  This is the designated insertion point for v2 Playwright form auto-send; keep routes calling
+  through it.
+- **`send_service.py`** — orchestrates automatic sending: `eligible_broker_ids` (email/both,
+  `opt_out_email` set, request still `not_started`, exposure not `not_found`) and
+  `send_and_persist`, which only calls `db.set_status(..., STATUS_SENT)` after SMTP accepts the
+  message — a failure leaves the request `not_started` so the next run retries it, and writes no
+  history row. **`sender.build_message` never sets `Reply-To`**: the From address must be the same
+  mailbox `[imap]` polls, or a broker's reply never reaches `inbox.poll()` and the request is stuck
+  at `sent` forever.
 - **Exposure scan pipeline** (`scanner.py` → `fetcher.py` → `extract.py` → `matcher.py` →
   `scan_service.py`/`ratelimit.py`) — checks whether a broker actually lists the profile, as
   opposed to `templater.py`'s "send them a removal request regardless." **`scanner.py`** only
@@ -95,8 +104,11 @@ framework. `app/main.py` holds every route; the rest of `app/` is a thin layered
 
 ## Conventions specific to this repo
 
-- **v1 is manual-send by design.** The app presents requests and tracks status; the user does the
-  actual emailing/form-filling. Don't add auto-sending without it being an explicit v2 task.
+- **Auto-send is opt-in and initial-send only.** Gated on `[smtp].enabled`, driven from the `/send`
+  page's Preview/Send buttons (never fires on a schedule). Only targets requests at `not_started`
+  for `email`/`both` brokers whose effective exposure isn't `not_found`. Follow-up re-sends
+  (`next_due`) and `form` brokers stay a manual click. Don't widen this scope without it being an
+  explicit task.
 - **`data/brokers.json` is the source of truth** for the broker registry — edit it and re-seed
   rather than writing brokers directly to the DB. A broker's `jurisdiction` marks its regime
   (`US` vs `GDPR`/`UK-GDPR`) and `category` sets its follow-up cadence, so those fields are

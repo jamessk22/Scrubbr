@@ -48,11 +48,12 @@ Requests go straight from this machine to the broker, at a slow, human-like pace
         <span class="muted">{{ rows|length }} broker(s)</span></h3>
     <div class="table-wrap">
     <table>
-        <thead><tr>{{ sort_th('broker', 'Broker', sort, dir) }}<th>Exposure</th><th>Actions</th></tr></thead>
+        <thead><tr>{{ sort_th('broker', 'Broker', sort, dir) }}{{ sort_th('category', 'Category', sort, dir) }}<th>Exposure</th><th>Actions</th></tr></thead>
         <tbody>
         {% for row in rows %}
             <tr>
                 <td data-label="Broker"><a href="/broker/{{ row.broker.id }}?profile_id={{ profile.id }}">{{ row.broker.name }}</a></td>
+                <td data-label="Category" class="muted">{{ row.category }}</td>
                 <td data-label="Exposure">
                     {{ exposure_badge(row.status, row.broker.id, profile.id,
                                        source=row.source, likely_via=row.likely_via) }}
@@ -71,7 +72,7 @@ Requests go straight from this machine to the broker, at a slow, human-like pace
             </tr>
             {% if row.manual_only %}
             <tr>
-                <td colspan="3">
+                <td colspan="4">
                     <div class="snapshot muted">
                         This broker's search can't be driven automatically (see its scan notes).
                         {% if row.link %}<a href="{{ row.link }}" target="_blank" rel="noopener">Run the search yourself</a>{% endif %}
@@ -80,7 +81,7 @@ Requests go straight from this machine to the broker, at a slow, human-like pace
             </tr>
             {% elif row.status in ('found', 'possible') and row.snapshot %}
             <tr>
-                <td colspan="3">
+                <td colspan="4">
                     <div class="snapshot">
                         <strong>{{ row.snapshot.name }}</strong>
                         {% if row.snapshot.age is not none %}&middot; age {{ row.snapshot.age }}
@@ -103,7 +104,7 @@ Requests go straight from this machine to the broker, at a slow, human-like pace
             </tr>
             {% elif row.status == 'unreachable' %}
             <tr>
-                <td colspan="3">
+                <td colspan="4">
                     <div class="snapshot muted">
                         {{ row.reason or "Couldn't complete the check." }}
                         {% if row.link %} &mdash; <a href="{{ row.link }}" target="_blank" rel="noopener">check manually</a>{% endif %}
@@ -112,7 +113,7 @@ Requests go straight from this machine to the broker, at a slow, human-like pace
             </tr>
             {% elif row.status == 'not_found' and row.weak %}
             <tr>
-                <td colspan="3">
+                <td colspan="4">
                     <div class="snapshot muted">
                         Weak result &mdash; this broker's search isn't scoped to your city or state, so only the
                         first page of nationwide results was checked.

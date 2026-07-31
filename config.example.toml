@@ -12,6 +12,23 @@ password = "your-app-specific-password"
 # broker replies and point this at that label.
 folder = "INBOX"
 
+[smtp]
+# Sends removal requests automatically. Use the SAME mailbox the [imap] section
+# polls: broker replies come back to the From address, and only mail landing in
+# the polled folder can auto-advance a request's status.
+enabled = false
+host = "smtp.gmail.com"
+port = 587
+username = "you@example.com"
+password = "your-app-specific-password"
+# "starttls" (port 587) or "ssl" (implicit TLS, port 465).
+security = "starttls"
+# Defaults to `username`. Must be a mailbox you can receive replies at.
+from_addr = ""
+# Jittered pause between messages, so a run doesn't look like a burst to the relay.
+min_delay_s = 5
+max_delay_s = 15
+
 [app]
 # Subject-line token prefix used to correlate broker replies to requests,
 # e.g. a generated subject includes "[PIR-42]". Keep it short and unique.

@@ -19,10 +19,11 @@ never leaves your computer.
   addresses, DOB), stored in SQLite, used only to fill request templates.
 - **Request generation** — per-broker legal deletion + opt-out requests from
   Jinja2 templates, chosen by jurisdiction (CCPA / GDPR / generic multi-state).
-- **Guided sending (manual)** — each broker gets an action page: for email
-  brokers, a `mailto:` link and copyable text; for form brokers, the opt-out URL
-  plus step-by-step instructions and your details to paste. *You* do the actual
-  sending in v1.
+- **Sending** — each broker gets an action page: for email brokers, a `mailto:`
+  link and copyable text; for form brokers, the opt-out URL plus step-by-step
+  instructions and your details to paste. Email-capable brokers can also be sent
+  automatically in bulk from the **Send** page (opt-in, see below); form brokers
+  always stay manual.
 - **Status tracking** — per-broker pipeline (`not started → sent → confirmed /
   rejected / needs verification`) with history, plus a dashboard with counters
   and a "due for follow-up" list.
@@ -69,6 +70,19 @@ and an **app-specific password**. Send your removal emails from that address so
 replies land where the poller can see them, and keep the `[PIR-N]` subject tag
 intact. Click **Check inbox** on the dashboard to poll.
 
+### Optional: automatic sending
+
+Set `[smtp] enabled = true` in `config.toml` with the **same mailbox** as
+`[imap]` — broker replies must land in the mailbox being polled, so auto-sent
+requests use no `Reply-To` and rely on the From address being that mailbox.
+On the **Send** page, **Preview** renders and stages every eligible
+not-yet-sent email/both broker without sending anything; **Send for real**
+opens one SMTP connection and works through the (editable) selection with a
+jittered pause between messages. Only brokers still `not_started` and not
+verdicted `not_found` are eligible; follow-up re-sends and form-only brokers
+always stay manual. A full run of the ~75 email-capable brokers takes several
+minutes and is well under Gmail's ~500 recipients/day limit.
+
 ## Tests
 
 ```sh
@@ -85,6 +99,7 @@ network calls.
 ```
 app/       main.py (routes) · db.py · models.py · templater.py · inbox.py · sender.py
            scanner.py · fetcher.py · extract.py · matcher.py · ratelimit.py · scan_service.py
+           send_service.py
            templates/ (HTML) · static/style.css
 data/      brokers.json · request_templates/ (ccpa/gdpr/generic + _identity)
 scripts/   seed_brokers.py
@@ -107,20 +122,15 @@ tests/
 
 ## v2 roadmap
 
-The v1 design deliberately leaves seams for automation:
+Automatic email sending shipped (see above). Remaining seams:
 
-1. **Automatic email sending (SMTP).** `app/sender.py` isolates delivery. Add a
-   `SmtpSender` that sends the rendered request via `smtplib` and returns a
-   receipt; routes call `sender.deliver(...)` instead of rendering a `mailto:`
-   link, and mark the request `sent` automatically. Requires the same
-   dedicated-mailbox + app-password setup already used for IMAP.
-2. **Web-form automation.** For `contact_method = form` brokers, drive the
-   opt-out flow with Playwright behind the same `deliver()` call, dispatched by
+1. **Web-form automation.** For `contact_method = form` brokers, drive the
+   opt-out flow with Playwright behind a shared `deliver()` call, dispatched by
    `broker.contact_method`. Expect friction from CAPTCHAs and phone/email
    verification — keep the manual fallback.
-3. **Scheduled follow-ups.** A background scheduler that re-sends due requests on
+2. **Scheduled follow-ups.** A background scheduler that re-sends due requests on
    their cadence instead of surfacing them for a manual click.
-4. **Broker list expansion.** Grow toward the full ~400+ using the public
+3. **Broker list expansion.** Grow toward the full ~400+ using the public
    [Big Ass Data Broker Opt-Out List](https://github.com/yaelwrites/Big-Ass-Data-Broker-Opt-Out-List)
    and the [California DROP](https://cppa.ca.gov/data_brokers/) registry.
 ```
