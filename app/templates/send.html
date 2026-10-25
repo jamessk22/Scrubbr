@@ -41,8 +41,8 @@ re-sends and form-only brokers stay a manual click from the broker list.</p>
 {% endif %}
 
 <section>
-    <!-- exposure_badge() below renders its own per-row <form>, so this bulk-action
-    form must not physically wrap the table -- nested <form> elements are invalid
+    <!-- Opening an exposure_badge() below inserts its own <form> into the row, so
+    this bulk-action form must not physically wrap the table -- nested <form> elements are invalid
     HTML and get silently corrected by the browser (the first nested form's start
     tag is dropped and its later </form> closes this one early instead), which
     breaks both the layout and which checkboxes actually submit. Every checkbox

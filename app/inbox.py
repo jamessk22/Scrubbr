@@ -10,6 +10,7 @@ import ssl
 from dataclasses import dataclass
 from datetime import datetime
 from email.header import decode_header
+from email.utils import parsedate_to_datetime
 from email.message import Message
 
 from . import db
@@ -45,8 +46,14 @@ _VERIFY_RE = re.compile(
     r"|click.{0,20}(link|button).{0,20}confirm|to complete your request)\b",
     re.I,
 )
+# "We hold nothing on you" usually means success for a deletion request, but
+# reads like a rejection, so it's its own class and always goes to review.
+_NO_RECORD_RE = re.compile(
+    r"\b(unable to (locate|find)|no (matching )?record(s)? found)\b",
+    re.I,
+)
 _REJECT_RE = re.compile(
-    r"\b(unable to (locate|find|verify)|no (matching )?record(s)? found"
+    r"\b(unable to verify"
     r"|we (cannot|can't|are unable to) (process|complete|fulfill)"
     r"|request (was )?(denied|rejected)|not subject to|do not qualify)\b",
     re.I,
@@ -77,7 +84,7 @@ class ImapConfig:
 
 
 def classify(subject: str, body: str) -> str:
-    """Return one of: confirmed, rejected, needs_verification, unknown.
+    """Return one of: confirmed, rejected, needs_verification, no_record, unknown.
 
     Verification demands are checked before confirmation because a "click to
     confirm" mail can contain both cues, and the safe action is to surface it.
@@ -85,6 +92,8 @@ def classify(subject: str, body: str) -> str:
     text = f"{subject}\n{body}"
     if _VERIFY_RE.search(text):
         return "needs_verification"
+    if _NO_RECORD_RE.search(text):
+        return "no_record"
     if _REJECT_RE.search(text):
         return "rejected"
     if _CONFIRM_RE.search(text):
@@ -141,6 +150,18 @@ def _fallback_message_id(msg: Message) -> str:
     shifts as the mailbox changes and would cause reprocessing/collisions."""
     basis = "\x00".join(msg.get(h, "") for h in ("From", "Date", "Subject"))
     return "nomsgid-" + hashlib.sha1(basis.encode("utf-8", "replace")).hexdigest()
+
+
+def _received_at(msg: Message) -> str:
+    """The message's own Date, as local naive ISO like every other timestamp
+    in the DB; poll time only when Date is missing or unparseable."""
+    try:
+        dt = parsedate_to_datetime(msg.get("Date", ""))
+    except (TypeError, ValueError):
+        dt = datetime.now()
+    if dt.tzinfo is not None:
+        dt = dt.astimezone().replace(tzinfo=None)
+    return dt.isoformat(timespec="seconds")
 
 
 def _request_id_from_subject(subject: str, prefix: str) -> int | None:
@@ -241,7 +262,7 @@ def poll(conn, cfg: ImapConfig, limit: int = 200) -> PollResult:
                 "classification": classification,
                 "subject": subject[:200],
                 "from_addr": from_addr[:200],
-                "received_at": datetime.now().isoformat(timespec="seconds"),
+                "received_at": _received_at(msg),
                 "needs_review": needs_review,
             })
     finally:

@@ -1,3 +1,4 @@
+{% from "_badges.html" import badge_menus with context -%}
 <!doctype html>
 <html lang="en">
 <head>
@@ -35,13 +36,31 @@
     <p>Runs entirely on your machine. Requests carry legal weight because you are
     the data subject &mdash; no authorized-agent paperwork needed.</p>
 </footer>
+{{ badge_menus() }}
 <script>
-// `toggle` doesn't bubble, so listen on the capture phase.
+// `toggle` doesn't bubble, so listen on the capture phase. An opening badge
+// gets a fresh copy of its kind's shared menu; a closing one drops it.
 document.addEventListener("toggle", (e) => {
-    if (!e.target.open || !e.target.classList.contains("badge-toggle")) return;
+    const badge = e.target;
+    if (!badge.classList || !badge.classList.contains("badge-toggle")) return;
+    if (!badge.open) {
+        badge.querySelector(".badge-menu")?.remove();
+        return;
+    }
     document.querySelectorAll("details.badge-toggle[open]").forEach((d) => {
-        if (d !== e.target) d.open = false;
+        if (d !== badge) d.open = false;
     });
+    const menu = document.getElementById("badge-menu-" + badge.dataset.menu)
+        .content.firstElementChild.cloneNode(true);
+    menu.action = badge.dataset.action;
+    menu.elements.profile_id.value = badge.dataset.profile;
+    const current = menu.querySelector(".current");
+    current.classList.add(menu.dataset.prefix + badge.dataset.status);
+    current.textContent = badge.querySelector("summary").textContent;
+    menu.querySelectorAll("button").forEach((b) => {
+        if (b.value === badge.dataset.status) b.remove();
+    });
+    badge.appendChild(menu);
 }, true);
 
 document.getElementById("theme-toggle").addEventListener("click", () => {

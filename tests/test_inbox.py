@@ -40,8 +40,28 @@ def test_classify_verification_demand():
 
 def test_classify_rejection():
     assert classify("Re: your request",
-                    "We were unable to locate any matching records for you.") == "rejected"
+                    "We are unable to process your request at this time.") == "rejected"
     assert classify("Request denied", "Your request was denied.") == "rejected"
+    assert classify("Re: request", "We were unable to verify the information provided.") == "rejected"
+
+
+def test_classify_no_record_is_not_a_rejection():
+    """'We hold nothing on you' is usually a success for a deletion request,
+    but reads like a rejection; it goes to review with no status change."""
+    assert classify("Re: your request",
+                    "We were unable to locate any matching records for you.") == "no_record"
+    assert classify("Re: [PIR-3]", "No records found matching your information.") == "no_record"
+
+
+def test_poll_routes_no_record_reply_to_review(conn, profile_id, monkeypatch):
+    req = _sent_request(conn, profile_id)
+    raw = _raw_message("<nr@x.test>", f"Re: request [PIR-{req.id}]", "No records found for you.")
+    _install_fake_client(monkeypatch, {b"1": raw})
+
+    result = inbox.poll(conn, _cfg())
+
+    assert result.advanced == 0 and result.review == 1
+    assert db.get_request(conn, req.id).status == STATUS_SENT
 
 
 def test_classify_unknown_goes_to_review():
@@ -233,3 +253,15 @@ def test_poll_survives_tag_for_a_request_that_no_longer_exists(conn, monkeypatch
 
     assert result.review == 1
     assert [m["request_id"] for m in db.review_queue(conn)] == [None]
+
+
+def test_poll_stores_message_date_not_poll_time(conn, monkeypatch):
+    raw = _raw_message("<dated@x.test>", "Hello", "Thanks for contacting us.")
+    _install_fake_client(monkeypatch, {b"1": raw})
+    inbox.poll(conn, _cfg())
+    assert db.review_queue(conn)[0]["received_at"] == "2026-01-01T10:00:00"
+
+
+def test_received_at_falls_back_to_now_without_a_usable_date():
+    assert inbox._received_at(email.message_from_string("Subject: x\n\nbody"))
+    assert inbox._received_at(email.message_from_string("Date: garbage\n\nbody"))

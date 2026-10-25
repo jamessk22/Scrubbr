@@ -3,6 +3,7 @@ from datetime import date, timedelta
 from app import db
 from app.models import (
     STATUS_CONFIRMED,
+    STATUS_NOT_STARTED,
     STATUS_SENT,
 )
 
@@ -88,3 +89,16 @@ def test_ensure_requests_creates_one_row_per_broker_and_is_idempotent(conn, prof
     result2 = db.ensure_requests(conn, profile_id)
     assert result2[some_id].status == STATUS_SENT
     assert len(result2) == len(brokers)
+
+
+def test_reset_to_not_started_clears_followup(conn, profile_id):
+    """next_due is a live trigger: a request reset to not_started must drop
+    off the due list rather than show as an overdue follow-up."""
+    db.upsert_broker(conn, BROKER)
+    broker = db.all_brokers(conn)[0]
+    req = db.get_or_create_request(conn, broker.id, profile_id)
+    db.set_status(conn, req.id, STATUS_SENT)
+    conn.execute("UPDATE requests SET next_due = '2000-01-01' WHERE id = ?", (req.id,))
+    db.set_status(conn, req.id, STATUS_NOT_STARTED)
+    assert db.get_request(conn, req.id).next_due is None
+    assert db.due_requests(conn) == []

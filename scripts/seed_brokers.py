@@ -37,6 +37,13 @@ def load_brokers(root: Path) -> tuple[list[dict], int]:
     return brokers + local, len(local)
 
 
+def orphaned_names(db_names: list[str], loaded: list[dict]) -> list[str]:
+    """DB brokers no longer in either JSON file. Upsert never deletes, so
+    these linger; they're reported, not removed, to keep their history."""
+    keep = {b["name"] for b in loaded}
+    return sorted(n for n in db_names if n not in keep)
+
+
 def main() -> None:
     brokers, local_count = load_brokers(ROOT)
     conn = db.connect()
@@ -48,6 +55,9 @@ def main() -> None:
     conn.commit()
     total = conn.execute("SELECT COUNT(*) AS n FROM brokers").fetchone()["n"]
     print(f"Imported/updated {len(brokers)} brokers ({local_count} from brokers.local.json). Registry now holds {total}.")
+    orphans = orphaned_names([b.name for b in db.all_brokers(conn)], brokers)
+    if orphans:
+        print(f"Not in brokers.json/brokers.local.json (kept, history intact): {', '.join(orphans)}")
 
 
 if __name__ == "__main__":

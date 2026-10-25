@@ -2,6 +2,7 @@ import json
 
 import pytest
 
+from scripts import seed_brokers
 from scripts.seed_brokers import load_brokers
 
 
@@ -32,3 +33,9 @@ def test_local_name_collision_exits(tmp_path):
     _write(tmp_path, "brokers.local.json", ["fastpeople-search"])
     with pytest.raises(SystemExit, match="'fastpeople-search'.*'Fast People Search'"):
         load_brokers(tmp_path)
+
+
+def test_orphaned_names_lists_db_brokers_missing_from_the_loaded_files():
+    loaded = [{"name": "Spokeo"}, {"name": "Acxiom"}]
+    assert seed_brokers.orphaned_names(["Acxiom", "Old Broker", "Spokeo"], loaded) == ["Old Broker"]
+    assert seed_brokers.orphaned_names(["Spokeo"], loaded) == []

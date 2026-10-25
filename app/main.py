@@ -120,6 +120,12 @@ def get_conn():
     return conn
 
 
+def _both_exist(conn, broker_id: int, profile_id: int) -> bool:
+    """Guards writes: a stale tab after deleting a profile would otherwise 500
+    on the FK."""
+    return db.get_broker(conn, broker_id) is not None and db.get_profile(conn, profile_id) is not None
+
+
 def _profile_scope(profile_id: str, profiles: list[Profile]) -> tuple[list[Profile], str]:
     """Resolve a `profile_id` query param ("", "all", or an id) against the
     profile list. Returns (profiles in scope, normalized selector)."""
@@ -168,8 +174,8 @@ def dashboard(request: HttpRequest, profile_id: str = "", show_all: str = "", so
             "next_due": lambda t: t[2].next_due,
         })
         cfg = load_config()
-        return views.TemplateResponse("dashboard.html", {
-            "request": request, "rows": rows, "counts": counts,
+        return views.TemplateResponse(request, "dashboard.html", {
+            "rows": rows, "counts": counts,
             "hidden": len(all_rows) - len(rows), "show_all": bool(show_all),
             "total": len(active), "due_brokers": due_brokers,
             "review_count": len(review), "profile_ready": all(p.full_name for p in profiles),
@@ -225,8 +231,8 @@ def broker_list(request: HttpRequest, category: str = "", status: str = "",
             "status": lambda t: _STATUS_RANK[t[2].status],
         })
         categories = sorted({b.category for b in brokers})
-        return views.TemplateResponse("brokers.html", {
-            "request": request, "rows": rows, "categories": categories,
+        return views.TemplateResponse(request, "brokers.html", {
+            "rows": rows, "categories": categories,
             "sel_category": category, "sel_status": status, "sel_exposure": exposure,
             "sel_name": name,
             "hidden": hidden, "show_all": bool(show_all),
@@ -267,8 +273,8 @@ def broker_detail(request: HttpRequest, broker_id: int, profile_id: str = ""):
                 "exposure": effective_exposure(broker, exposures.get(broker_id), found_networks(brokers, exposures)),
                 "search_link": search_link,
             })
-        return views.TemplateResponse("broker_detail.html", {
-            "request": request, "broker": broker, "entries": entries,
+        return views.TemplateResponse(request, "broker_detail.html", {
+            "broker": broker, "entries": entries,
             "is_form": broker.contact_method == CONTACT_FORM,
             "profiles": profiles, "selected_profile": selected, "multi_profile": len(profiles) > 1,
         })
@@ -280,8 +286,8 @@ def broker_detail(request: HttpRequest, broker_id: int, profile_id: str = ""):
 def update_status(broker_id: int, profile_id: int = Form(...), status: str = Form(...), back: str = Form("")):
     conn = get_conn()
     try:
-        req = db.get_or_create_request(conn, broker_id, profile_id)
-        if status in STATUS_LABELS:
+        if _both_exist(conn, broker_id, profile_id) and status in STATUS_LABELS:
+            req = db.get_or_create_request(conn, broker_id, profile_id)
             db.set_status(conn, req.id, status)
         target = _safe_redirect_target(back, f"/broker/{broker_id}?profile_id={profile_id}")
         return RedirectResponse(target, status_code=303)
@@ -392,8 +398,8 @@ def scan_page(request: HttpRequest, profile_id: str = "", sort: str = "", dir: s
             (b, streak, reason) for b, streak, reason in db.drifting_brokers(conn, DRIFT_STREAK_THRESHOLD)
             if not scan_service.is_skipped(b) and not b.defunct
         ]
-        return views.TemplateResponse("scan.html", {
-            "request": request, "profile": profile, "profiles": profiles,
+        return views.TemplateResponse(request, "scan.html", {
+            "profile": profile, "profiles": profiles,
             "multi_profile": len(profiles) > 1,
             "groups": groups, "assumed": assumed, "ctx_ready": ctx is not None,
             "bulk": _bulk_scans.get(profile.id), "drifting": drifting,
@@ -531,8 +537,8 @@ def send_page(request: HttpRequest, profile_id: str = "", sort: str = "", dir: s
             "exposure": lambda b: _EXPOSURE_RANK[effective_exposure(b, exposures.get(b.id), networks)],
             "result": lambda b: bulk_results.get(b.id, {}).get("status"),
         })
-        return views.TemplateResponse("send.html", {
-            "request": request, "profile": profile, "profiles": profiles,
+        return views.TemplateResponse(request, "send.html", {
+            "profile": profile, "profiles": profiles,
             "multi_profile": len(profiles) > 1, "smtp_enabled": smtp_enabled,
             "eligible": eligible,
             "exposure_of": lambda b: effective_exposure(b, exposures.get(b.id), networks),
@@ -599,13 +605,15 @@ def scan_mark(broker_id: int, profile_id: int = Form(...), status: str = Form(..
     conn = get_conn()
     try:
         broker = db.get_broker(conn, broker_id)
-        if status == EXPOSURE_UNKNOWN:
+        if not _both_exist(conn, broker_id, profile_id):
+            pass
+        elif status == EXPOSURE_UNKNOWN:
             db.clear_exposure(conn, broker_id, profile_id)
-            if broker and broker.network:
+            if broker.network:
                 db.clear_propagated_in_network(conn, broker.network, profile_id)
         elif status in EXPOSURE_CHOICES:
             db.set_exposure(conn, broker_id, profile_id, status, "manual")
-            if broker and broker.network:
+            if broker.network:
                 db.propagate_exposure(conn, broker, profile_id, status)
         target = _safe_redirect_target(back, f"/scan?profile_id={profile_id}")
         return RedirectResponse(target, status_code=303)
@@ -623,8 +631,8 @@ def profiles_page(request: HttpRequest, sort: str = "", dir: str = ""):
             "full_name": lambda p: p.full_name.casefold() or None,
             "state": lambda p: p.state.casefold() or None,
         })
-        return views.TemplateResponse("profiles.html", {
-            "request": request, "profiles": profiles, "sort": sort, "dir": dir,
+        return views.TemplateResponse(request, "profiles.html", {
+            "profiles": profiles, "sort": sort, "dir": dir,
         })
     finally:
         conn.close()
@@ -632,8 +640,8 @@ def profiles_page(request: HttpRequest, sort: str = "", dir: str = ""):
 
 @app.get("/profiles/new", response_class=HTMLResponse)
 def new_profile_page(request: HttpRequest):
-    return views.TemplateResponse("profile_form.html", {
-        "request": request, "profile": Profile(), "is_new": True,
+    return views.TemplateResponse(request, "profile_form.html", {
+        "profile": Profile(), "is_new": True,
     })
 
 
@@ -663,8 +671,8 @@ def edit_profile_page(request: HttpRequest, profile_id: int):
         profile = db.get_profile(conn, profile_id)
         if profile is None:
             return RedirectResponse("/profiles", status_code=303)
-        return views.TemplateResponse("profile_form.html", {
-            "request": request, "profile": profile, "is_new": False,
+        return views.TemplateResponse(request, "profile_form.html", {
+            "profile": profile, "is_new": False,
         })
     finally:
         conn.close()
@@ -715,8 +723,8 @@ def review_page(request: HttpRequest):
                     broker = db.get_broker(conn, req.broker_id)
                     profile = db.get_profile(conn, req.profile_id)
             enriched.append({**m, "broker": broker, "profile": profile})
-        return views.TemplateResponse("review.html", {
-            "request": request, "items": enriched, "statuses": STATUS_LABELS,
+        return views.TemplateResponse(request, "review.html", {
+            "items": enriched, "statuses": STATUS_LABELS,
             "profiles": profiles, "brokers": db.all_brokers(conn),
         })
     finally:
@@ -728,9 +736,9 @@ def resolve_review(message_id: str = Form(...), broker_id: int = Form(...), prof
     """Manually classify a review-queue message and apply status to its broker."""
     conn = get_conn()
     try:
-        if db.get_broker(conn, broker_id) is None:
-            # Bogus broker id from the free-text field: don't INSERT a dangling
-            # FK (IntegrityError -> 500) or mark the item reviewed.
+        if not _both_exist(conn, broker_id, profile_id):
+            # Bogus id from the free-text field or a stale tab: don't INSERT a
+            # dangling FK (IntegrityError -> 500) or mark the item reviewed.
             return RedirectResponse("/review", status_code=303)
         req = db.get_or_create_request(conn, broker_id, profile_id)
         if status in STATUS_LABELS:

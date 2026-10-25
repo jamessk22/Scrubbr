@@ -49,7 +49,9 @@ framework. `app/main.py` holds every route; the rest of `app/` is a thin layered
   subject tag (`request_tag`); classification advances status, and anything ambiguous or
   unmatched is flagged `needs_review` for the review queue. **Never sends/replies/deletes.**
   Verification demands are checked before confirmations on purpose (safest when a reply has both).
-  A message that fails to parse, or whose tag names a request that no longer exists, is still
+  "No records found" replies classify as `no_record` and always go to review: for a deletion
+  request that usually means success, but it reads like a rejection. A message that fails to
+  parse (`classification: error`), or whose tag names a request that no longer exists, is still
   recorded (needs review) so it can't poison later polls.
 - **`sender.py`** — delivery seam. Builds `mailto:` links (manual fallback for form brokers) and,
   for email-capable brokers, sends via SMTP (`SmtpConfig`, `build_message`, `open_smtp`, `send`).
@@ -93,7 +95,9 @@ framework. `app/main.py` holds every route; the rest of `app/` is a thin layered
   (a same-`network` sibling was `found`) is **derived, never stored** — `likely` never cascades and
   `possible` never promotes siblings
   (`models.effective_exposure` precedence: own verdict > network-derived `likely` > `unknown`/`assumed`).
-  Every badge in the UI is a dropdown of pill-styled options (`templates/_badges.html`): exposure posts to
+  Every badge in the UI is a dropdown of pill-styled options (`templates/_badges.html`). Rows render
+  only a `<details>` with data attributes; `base.html` clones one shared `<template>` menu per kind
+  into whichever badge opens (per-row menus were ~78% of the list pages' bytes). Exposure posts to
   `/scan/{id}/mark` (picking `unknown` calls `db.clear_exposure`, deleting the row so the derived state
   returns), status posts to `/broker/{id}/status`. Both carry a `back` field so the badge redirects to the
   page it was clicked from — validate it through `_safe_redirect_target`, never trust it raw.

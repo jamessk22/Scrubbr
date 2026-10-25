@@ -482,3 +482,40 @@ def test_send_status_returns_empty_state_for_unknown_profile(client, monkeypatch
     assert resp.json() == {
         "running": False, "total": 0, "done": 0, "error": "", "dry_run": False, "results": {},
     }
+
+
+def _row_counts(client):
+    conn = main.get_conn()
+    counts = tuple(conn.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0]
+                   for t in ("requests", "exposures", "request_history"))
+    conn.close()
+    return counts
+
+
+@pytest.mark.parametrize("path_fmt, data", [
+    ("/broker/{broker}/status", {"profile_id": 999999, "status": "sent"}),
+    ("/scan/{broker}/mark", {"profile_id": 999999, "status": "found"}),
+    ("/scan/999999/mark", {"profile_id": "{profile}", "status": "found"}),
+    ("/review/resolve", {"message_id": "<abc/xyz@host>", "broker_id": "{broker}",
+                         "profile_id": 999999, "status": "sent"}),
+])
+def test_writes_with_nonexistent_ids_redirect_without_writing(client, path_fmt, data):
+    """A stale tab after deleting a profile must not 500 on an FK violation."""
+    ids = {"broker": client.broker_id, "profile": client.profile_id}
+    data = {k: str(v).format(**ids) for k, v in data.items()}
+    before = _row_counts(client)
+    resp = client.post(path_fmt.format(**ids), data=data, follow_redirects=False)
+    assert resp.status_code == 303
+    assert _row_counts(client) == before
+
+
+def test_badge_menus_render_once_per_page_not_per_row(client):
+    """Per-row menus were ~78% of the dashboard's bytes; rows now carry only
+    data attributes and base.html clones one shared menu per kind."""
+    soup = BeautifulSoup(client.get("/brokers").text, "html.parser")
+    for kind in ("status", "exposure"):
+        assert len(soup.select(f"template#badge-menu-{kind}")) == 1
+    badge = soup.select_one('details.badge-toggle[data-menu="status"]')
+    assert badge["data-action"] == f"/broker/{client.broker_id}/status"
+    assert badge["data-profile"] == str(client.profile_id)
+    assert all(form.find_parent("template") for form in soup.select("form.badge-menu"))

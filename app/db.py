@@ -10,6 +10,7 @@ from .models import (
     EXPOSURE_SOURCE_NETWORK,
     EXPOSURE_UNREACHABLE,
     FOLLOWUP_DAYS,
+    STATUS_NOT_STARTED,
     STATUS_SENT,
     TERMINAL_STATUSES,
     Broker,
@@ -41,7 +42,7 @@ CREATE TABLE IF NOT EXISTS brokers (
     opt_out_url TEXT DEFAULT '',
     opt_out_email TEXT DEFAULT '',
     contact_method TEXT DEFAULT 'email',
-    jurisdiction TEXT DEFAULT 'CCPA',
+    jurisdiction TEXT DEFAULT 'US',
     difficulty INTEGER DEFAULT 1,
     notes TEXT DEFAULT '',
     search_url TEXT DEFAULT '',
@@ -199,7 +200,7 @@ def upsert_broker(conn: sqlite3.Connection, b: dict) -> None:
               network=excluded.network, defunct=excluded.defunct""",
         {
             "website": "", "opt_out_url": "", "opt_out_email": "",
-            "contact_method": "email", "jurisdiction": "CCPA",
+            "contact_method": "email", "jurisdiction": "US",
             "difficulty": 1, "notes": "", "search_url": "", "scan_config": "", "network": "",
             "defunct": 0, **b,
         },
@@ -310,14 +311,6 @@ def get_request(conn: sqlite3.Connection, request_id: int) -> Request | None:
     return _request(conn, row) if row else None
 
 
-def all_requests(conn: sqlite3.Connection, profile_id: int) -> dict[int, Request]:
-    """Returns {broker_id: Request} for every broker, scoped to one profile (auto-created lazily)."""
-    result: dict[int, Request] = {}
-    for b in all_brokers(conn):
-        result[b.id] = get_or_create_request(conn, b.id, profile_id)
-    return result
-
-
 def set_status(
     conn: sqlite3.Connection, request_id: int, status: str, note: str = ""
 ) -> None:
@@ -331,6 +324,8 @@ def set_status(
         cadence = FOLLOWUP_DAYS.get(broker.category, DEFAULT_FOLLOWUP_DAYS) if broker else DEFAULT_FOLLOWUP_DAYS
         fields["sent_at"] = now
         fields["next_due"] = (date.today() + timedelta(days=cadence)).isoformat()
+    elif status == STATUS_NOT_STARTED:
+        fields["next_due"] = None  # sent_at/history stay as the record; next_due is a live trigger
     conn.execute(
         f"UPDATE requests SET {', '.join(f'{k}=:{k}' for k in fields)} WHERE id = :id",
         {**fields, "id": request_id},

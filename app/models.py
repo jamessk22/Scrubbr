@@ -81,7 +81,7 @@ class Broker:
     opt_out_url: str = ""
     opt_out_email: str = ""
     contact_method: str = CONTACT_EMAIL
-    jurisdiction: str = "CCPA"
+    jurisdiction: str = "US"
     difficulty: int = 1  # 1 easy .. 3 hard (ID upload / phone / notarized)
     notes: str = ""
     search_url: str = ""  # GET template with {first}/{last}/{city}/{state}; empty = unsearchable

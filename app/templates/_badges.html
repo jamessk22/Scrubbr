@@ -1,34 +1,33 @@
 {% macro _back() %}{{ request.url.path }}{{ '?' ~ request.url.query if request.url.query else '' }}{% endmacro %}
 
-{% macro exposure_badge(status, broker_id, profile_id, source='', likely_via='') %}
-<details class="badge-toggle">
-    <summary class="badge e-{{ status }}" id="exp-{{ broker_id }}-{{ profile_id }}">{{ EXPOSURE_LABELS[status] }}</summary>
-    <form class="badge-menu" method="post" action="/scan/{{ broker_id }}/mark">
-        <input type="hidden" name="profile_id" value="{{ profile_id }}">
-        <input type="hidden" name="back" value="{{ _back() }}">
-        <span class="badge e-{{ status }} current">{{ EXPOSURE_LABELS[status] }}</span>
-        <hr>
-        {% for key in EXPOSURE_CHOICES if key != status %}
-        <button class="badge e-{{ key }}" type="submit" name="status" value="{{ key }}">{{ EXPOSURE_LABELS[key] }}</button>
-        {% endfor %}
-    </form>
-</details>
+{# Rows carry only data attributes; base.html clones the matching shared menu
+   from badge_menus() into whichever badge opens. #}
+{% macro exposure_badge(status, broker_id, profile_id, source='', likely_via='') -%}
+<details class="badge-toggle" data-menu="exposure" data-action="/scan/{{ broker_id }}/mark" data-profile="{{ profile_id }}" data-status="{{ status }}"><summary class="badge e-{{ status }}" id="exp-{{ broker_id }}-{{ profile_id }}">{{ EXPOSURE_LABELS[status] }}</summary></details>
 {%- if status == 'likely' %}<span class="muted exposure-note"> &middot; {{ likely_via }} network</span>
 {%- elif source == 'network' %}<span class="muted exposure-note"> &middot; via {{ likely_via }}</span>
 {%- elif source == 'manual' %}<span class="muted exposure-note"> &middot; manually set</span>{% endif %}
-{% endmacro %}
+{%- endmacro %}
 
-{% macro status_badge(status, broker_id, profile_id) %}
-<details class="badge-toggle">
-    <summary class="badge s-{{ status }}">{{ STATUS_LABELS[status] }}</summary>
-    <form class="badge-menu" method="post" action="/broker/{{ broker_id }}/status">
-        <input type="hidden" name="profile_id" value="{{ profile_id }}">
+{% macro status_badge(status, broker_id, profile_id) -%}
+<details class="badge-toggle" data-menu="status" data-action="/broker/{{ broker_id }}/status" data-profile="{{ profile_id }}" data-status="{{ status }}"><summary class="badge s-{{ status }}">{{ STATUS_LABELS[status] }}</summary></details>
+{%- endmacro %}
+
+{% macro _menu(kind, prefix, keys, labels) %}
+<template id="badge-menu-{{ kind }}">
+    <form class="badge-menu" method="post" data-prefix="{{ prefix }}">
+        <input type="hidden" name="profile_id">
         <input type="hidden" name="back" value="{{ _back() }}">
-        <span class="badge s-{{ status }} current">{{ STATUS_LABELS[status] }}</span>
+        <span class="badge current"></span>
         <hr>
-        {% for key, label in STATUS_LABELS.items() if key != status %}
-        <button class="badge s-{{ key }}" type="submit" name="status" value="{{ key }}">{{ label }}</button>
+        {% for key in keys %}
+        <button class="badge {{ prefix }}{{ key }}" type="submit" name="status" value="{{ key }}">{{ labels[key] }}</button>
         {% endfor %}
     </form>
-</details>
+</template>
+{% endmacro %}
+
+{% macro badge_menus() %}
+{{ _menu('exposure', 'e-', EXPOSURE_CHOICES, EXPOSURE_LABELS) }}
+{{ _menu('status', 's-', STATUS_LABELS, STATUS_LABELS) }}
 {% endmacro %}

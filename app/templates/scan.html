@@ -185,6 +185,7 @@ function pollBulkScan() {
         for (const [brokerId, result] of Object.entries(state.results || {})) {
             const badge = document.getElementById('exp-' + brokerId + '-{{ profile.id }}');
             if (badge) {
+                badge.parentElement.dataset.status = result.status;
                 badge.className = 'badge e-' + result.status;
                 badge.textContent = LABELS[result.status] || result.status;
             }
