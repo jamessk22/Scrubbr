@@ -80,6 +80,35 @@ def test_dashboard_sort_broker_asc_desc(client):
     assert resp.text.index("Acme Broker") < resp.text.index("Zeta Broker")
 
 
+def _seed_defunct_overdue(client):
+    conn = main.get_conn()
+    db.upsert_broker(conn, {"name": "Gone Broker", "category": "people-search",
+                            "defunct": True, "notes": "NXDOMAIN 2026-10-13"})
+    broker_id = next(b.id for b in db.all_brokers(conn) if b.name == "Gone Broker")
+    req = db.get_or_create_request(conn, broker_id, client.profile_id)
+    db.set_status(conn, req.id, "sent")
+    conn.execute("UPDATE requests SET next_due = '2000-01-01' WHERE id = ?", (req.id,))
+    conn.commit()
+    conn.close()
+    return broker_id
+
+
+def test_dashboard_excludes_defunct_from_meter_rows_and_due(client):
+    _seed_defunct_overdue(client)
+    resp = client.get("/?show_all=1")
+    assert resp.status_code == 200
+    assert "Gone Broker" not in resp.text
+    assert "1 broker<" in resp.text
+
+
+def test_brokers_list_and_detail_show_defunct(client):
+    broker_id = _seed_defunct_overdue(client)
+    resp = client.get("/brokers?show_all=1")
+    assert "Gone Broker" in resp.text and "Defunct" in resp.text
+    resp = client.get(f"/broker/{broker_id}")
+    assert "marked defunct: NXDOMAIN 2026-10-13" in resp.text
+
+
 def test_brokers_sort_preserves_filter_in_header_link(client):
     resp = client.get("/brokers?category=people-search&sort=broker&dir=asc")
     assert resp.status_code == 200

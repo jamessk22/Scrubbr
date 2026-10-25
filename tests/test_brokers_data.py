@@ -81,3 +81,9 @@ def test_email_method_implies_email_present(brokers):
             assert b.get("opt_out_email"), (
                 f"{b['name']}: contact_method {b['contact_method']} but no opt_out_email"
             )
+
+
+def test_defunct_is_bool(brokers):
+    for b in brokers:
+        if "defunct" in b:
+            assert isinstance(b["defunct"], bool), f"{b['name']}: defunct not bool"

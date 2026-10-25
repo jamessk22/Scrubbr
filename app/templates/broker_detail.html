@@ -5,6 +5,10 @@
 <p><a href="/brokers">&larr; All brokers</a></p>
 <h1>{{ broker.name }}</h1>
 
+{% if broker.defunct %}
+<div class="banner warn">This broker is marked defunct: {{ broker.notes }}</div>
+{% endif %}
+
 {% if multi_profile %}
 <form class="filters" method="get" action="/broker/{{ broker.id }}">
     <label>Profile

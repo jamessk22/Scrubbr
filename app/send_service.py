@@ -28,6 +28,7 @@ def eligible_broker_ids(conn, brokers: list[Broker], profile_id: int) -> list[in
     return [
         b.id for b in brokers
         if b.contact_method in (CONTACT_EMAIL, CONTACT_BOTH)
+        and not b.defunct
         and b.opt_out_email
         and requests[b.id].status == STATUS_NOT_STARTED
         and effective_exposure(b, exposures.get(b.id), networks) != EXPOSURE_NOT_FOUND

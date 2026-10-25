@@ -118,3 +118,9 @@ def test_dry_run_sends_nothing_and_persists_no_status(conn, db_profile):
     assert result["status"] == "dry_run"
     req = db.get_or_create_request(conn, broker.id, db_profile.id)
     assert req.status == "not_started"
+
+
+def test_eligible_excludes_defunct_broker(conn, profile_id):
+    b = _broker(conn, defunct=True)
+    ids = send_service.eligible_broker_ids(conn, db.all_brokers(conn), profile_id)
+    assert b.id not in ids

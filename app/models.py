@@ -77,6 +77,7 @@ class Broker:
     search_url: str = ""  # GET template with {first}/{last}/{city}/{state}; empty = unsearchable
     scan_config: str = ""  # JSON: {search_url, result_selector, fields{}}; empty = no scan pipeline config
     network: str = ""  # shared-owner/database group; one sibling's `found` implies `likely` for the rest
+    defunct: bool = False  # taken down (court order / NXDOMAIN); kept for history, excluded from meter/send/scan
 
 
 @dataclass

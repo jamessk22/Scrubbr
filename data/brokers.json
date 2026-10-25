@@ -167,7 +167,7 @@
       "contact_method": "both",
       "jurisdiction": "US",
       "difficulty": 3,
-      "notes": "Notoriously difficult; may require phone verification and re-lists frequently.",
+      "notes": "Notoriously difficult; may require phone verification and re-lists frequently. 2026-10-25: domain serves a court-transfer notice -- Atlas Data Privacy Corp. v. Radaris.com, N.J. Super. Ct., Middlesex Cty., MID-L-000847-24; final default judgment 2026-08-27 transferred the domain to Atlas. No people-search or opt-out pages remain.",
       "search_url": "https://radaris.com/ng/search?ff={first}&fl={last}&fc={city}&fs={state}",
       "scan": {
         "verified": false,
@@ -179,7 +179,8 @@
           "locations": "div.person-address",
           "relatives": "a.relative-link"
         }
-      }
+      },
+      "defunct": true
     },
     {
       "name": "MyLife",
@@ -372,7 +373,7 @@
       "contact_method": "form",
       "jurisdiction": "US",
       "difficulty": 1,
-      "notes": "",
+      "notes": "BADBOOL 2026-09-27: opt-out reportedly no longer works in all states.",
       "search_url": "https://www.advancedbackgroundchecks.com/find/name/{first}-{last}",
       "scan": {
         "verified": true,
@@ -535,7 +536,8 @@
       "contact_method": "both",
       "jurisdiction": "US",
       "difficulty": 1,
-      "notes": "Address-directory; listings are address-keyed, no name-search GET URL."
+      "notes": "Address-directory; listings are address-keyed, no name-search GET URL. 2026-10-25: domain serves a court-transfer notice -- Atlas Data Privacy Corp. v. Radaris.com, N.J. Super. Ct., Middlesex Cty., MID-L-000847-24; final default judgment 2026-08-27 transferred the domain to Atlas. No people-search or opt-out pages remain.",
+      "defunct": true
     },
     {
       "name": "SearchPeopleFree",
@@ -600,9 +602,10 @@
       "contact_method": "form",
       "jurisdiction": "US",
       "difficulty": 1,
-      "notes": "Suspected shared operator/engine with the TruePeopleSearch/FastPeopleSearch family (heuristic grouping; treat cross-inference as advisory). DEFUNCT? Domain did not resolve on 2026-07-09 (NXDOMAIN) -- scan config removed. These clone sites churn; the tps-family engine likely lives on under other domains.",
+      "notes": "Suspected shared operator/engine with the TruePeopleSearch/FastPeopleSearch family (heuristic grouping; treat cross-inference as advisory). DEFUNCT? Domain did not resolve on 2026-07-09 (NXDOMAIN) -- scan config removed. These clone sites churn; the tps-family engine likely lives on under other domains. 2026-10-25: domain resolves again but serves the same Atlas court-transfer notice (MID-L-000847-24, judgment 2026-08-27); no people-search or opt-out pages.",
       "search_url": "",
-      "network": "tps-family"
+      "network": "tps-family",
+      "defunct": true
     },
     {
       "name": "VoterRecords",

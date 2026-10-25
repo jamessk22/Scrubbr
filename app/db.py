@@ -46,7 +46,8 @@ CREATE TABLE IF NOT EXISTS brokers (
     notes TEXT DEFAULT '',
     search_url TEXT DEFAULT '',
     scan_config TEXT DEFAULT '',
-    network TEXT DEFAULT ''
+    network TEXT DEFAULT '',
+    defunct INTEGER DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS profiles (
@@ -166,6 +167,8 @@ def _migrate(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE brokers ADD COLUMN scan_config TEXT DEFAULT ''")
     if broker_cols and "network" not in broker_cols:
         conn.execute("ALTER TABLE brokers ADD COLUMN network TEXT DEFAULT ''")
+    if broker_cols and "defunct" not in broker_cols:
+        conn.execute("ALTER TABLE brokers ADD COLUMN defunct INTEGER DEFAULT 0")
 
     exposure_cols = {r["name"] for r in conn.execute("PRAGMA table_info(exposures)")}
     if exposure_cols and "snapshot" not in exposure_cols:
@@ -184,20 +187,21 @@ def upsert_broker(conn: sqlite3.Connection, b: dict) -> None:
     conn.execute(
         """INSERT INTO brokers
              (name, category, website, opt_out_url, opt_out_email,
-              contact_method, jurisdiction, difficulty, notes, search_url, scan_config, network)
+              contact_method, jurisdiction, difficulty, notes, search_url, scan_config, network, defunct)
            VALUES (:name, :category, :website, :opt_out_url, :opt_out_email,
-              :contact_method, :jurisdiction, :difficulty, :notes, :search_url, :scan_config, :network)
+              :contact_method, :jurisdiction, :difficulty, :notes, :search_url, :scan_config, :network, :defunct)
            ON CONFLICT(name) DO UPDATE SET
               category=excluded.category, website=excluded.website,
               opt_out_url=excluded.opt_out_url, opt_out_email=excluded.opt_out_email,
               contact_method=excluded.contact_method, jurisdiction=excluded.jurisdiction,
               difficulty=excluded.difficulty, notes=excluded.notes,
               search_url=excluded.search_url, scan_config=excluded.scan_config,
-              network=excluded.network""",
+              network=excluded.network, defunct=excluded.defunct""",
         {
             "website": "", "opt_out_url": "", "opt_out_email": "",
             "contact_method": "email", "jurisdiction": "CCPA",
-            "difficulty": 1, "notes": "", "search_url": "", "scan_config": "", "network": "", **b,
+            "difficulty": 1, "notes": "", "search_url": "", "scan_config": "", "network": "",
+            "defunct": 0, **b,
         },
     )
 
