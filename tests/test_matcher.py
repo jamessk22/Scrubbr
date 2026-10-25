@@ -81,9 +81,17 @@ def test_signal_location_matches_past_address():
     c = CandidateListing(name="Jane Public", locations=["Albany, NY"])
     signals = compute_signals(c, profile)
     assert signals["location"] is True
-    # state is a *weaker* signal keyed off profile.state (current residence),
-    # so a stale-address match doesn't imply it.
-    assert signals["state"] is False
+    # A city match already implies its state, so state isn't counted again.
+    assert signals["state"] is None
+
+
+def test_same_city_stranger_with_wrong_age_is_possible_never_found():
+    """City + state used to count as two signals, letting a same-name
+    stranger in the profile's city reach found despite a wrong age."""
+    c = CandidateListing(name="Jane Public", age=70, locations=["Boston, MA"])
+    match = best_match([c], _profile())
+    assert match is not None
+    assert match[1].verdict == MATCH_POSSIBLE
 
 
 def test_signal_phone_digits_only_compare():

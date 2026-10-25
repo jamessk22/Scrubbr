@@ -15,6 +15,11 @@ def test_search_context(profile):
     }
 
 
+def test_search_context_strips_generational_suffix():
+    assert search_context(Profile(full_name="John Smith Jr"))["last"] == "Smith"
+    assert search_context(Profile(full_name="John Smith III"))["last"] == "Smith"
+
+
 def test_search_context_incomplete_name():
     assert search_context(Profile(full_name="Cher")) is None
     assert search_context(Profile(full_name="")) is None

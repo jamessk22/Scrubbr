@@ -6,6 +6,7 @@ as sender.py for outbound email.
 import contextlib
 import os
 import re
+import threading
 from dataclasses import dataclass
 
 from bs4 import BeautifulSoup
@@ -16,9 +17,14 @@ BROWSER_DIR = ROOT / ".browser"
 DUMP_DIR = ROOT / ".scans"  # gitignored: raw pages contain real listings
 
 # Holds the persistent context opened by browser_session(), if any, so fetch()
-# can reuse it instead of paying browser startup per call. ratelimit.py caps
-# scan concurrency at 1, so a plain module-level slot (not per-thread) is safe.
+# can reuse it instead of paying browser startup per call. Playwright's sync API
+# is bound to the thread that started it, so only that thread (_active_owner)
+# may reuse it.
 _active_context = None
+_active_owner: int | None = None
+# Owns the .browser/ profile dir: Chromium locks it, so a second persistent
+# context can't open while a session or a launch-per-call fetch holds it.
+_browser_lock = threading.Lock()
 
 _BLOCKED_STATUS = {403, 429, 503}
 _BLOCKED_MARKERS = (
@@ -48,6 +54,11 @@ class Blocked(Exception):
         self.reason = reason
         self.status = status
         super().__init__(reason)
+
+
+class Busy(Exception):
+    """The browser is held by another thread (a bulk scan). Transient: the
+    caller should neither persist nor count it as a scan failure."""
 
 
 @dataclass
@@ -87,16 +98,16 @@ def browser_session():
     today's launch-per-call behavior."""
     from playwright.sync_api import sync_playwright
 
-    global _active_context
+    global _active_context, _active_owner
     settings = scan_settings()
     BROWSER_DIR.mkdir(exist_ok=True)
-    with sync_playwright() as p:
+    with _browser_lock, sync_playwright() as p:
         context = p.chromium.launch_persistent_context(str(BROWSER_DIR), headless=settings["headless"])
-        _active_context = context
+        _active_context, _active_owner = context, threading.get_ident()
         try:
             yield
         finally:
-            _active_context = None
+            _active_context, _active_owner = None, None
             context.close()
 
 
@@ -130,22 +141,28 @@ def fetch(url: str, result_selector: str = "") -> FetchResult:
     Reuses the context opened by browser_session() if one is active;
     otherwise launches and tears down its own, as before.
 
-    Raises Blocked on a CAPTCHA/challenge page or a 403/429/503 status.
+    Raises Blocked on a CAPTCHA/challenge page or a 403/429/503 status, and
+    Busy if another thread holds the browser.
     """
     settings = scan_settings()
 
-    if _active_context is not None:
+    if _active_context is not None and _active_owner == threading.get_ident():
         html, final_url, status = _load(_active_context, url, result_selector, settings)
     else:
-        from playwright.sync_api import sync_playwright  # lazy: only this path needs a browser
+        if not _browser_lock.acquire(blocking=False):
+            raise Busy("A bulk scan is using the browser")
+        try:
+            from playwright.sync_api import sync_playwright  # lazy: only this path needs a browser
 
-        BROWSER_DIR.mkdir(exist_ok=True)
-        with sync_playwright() as p:
-            context = p.chromium.launch_persistent_context(str(BROWSER_DIR), headless=settings["headless"])
-            try:
-                html, final_url, status = _load(context, url, result_selector, settings)
-            finally:
-                context.close()
+            BROWSER_DIR.mkdir(exist_ok=True)
+            with sync_playwright() as p:
+                context = p.chromium.launch_persistent_context(str(BROWSER_DIR), headless=settings["headless"])
+                try:
+                    html, final_url, status = _load(context, url, result_selector, settings)
+                finally:
+                    context.close()
+        finally:
+            _browser_lock.release()
 
     if os.getenv("SCRUBBR_DUMP_HTML"):
         _dump_html(final_url, html)

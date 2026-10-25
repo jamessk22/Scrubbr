@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 from datetime import date
 
 from .extract import normalize_location
-from .models import STATE_ABBR, CandidateListing, Profile
+from .models import STATE_ABBR, CandidateListing, Profile, strip_name_suffixes
 
 MATCH_FOUND = "found"
 MATCH_POSSIBLE = "possible"
@@ -52,17 +52,6 @@ class MatchResult:
     signals: dict[str, bool | None] = field(default_factory=dict)
 
 
-_NAME_SUFFIXES = {"jr", "sr", "ii", "iii", "iv"}
-
-
-def _strip_suffix_parts(parts: list[str]) -> list[str]:
-    """Drop trailing generational suffixes (Jr, Sr, II..IV) so the last real
-    surname token is what the gate compares on, not "jr"."""
-    while parts and parts[-1].strip(".").lower() in _NAME_SUFFIXES:
-        parts = parts[:-1]
-    return parts
-
-
 def _norm_last(name: str) -> str:
     return name.strip().lower().replace("-", "").replace("'", "")
 
@@ -81,7 +70,7 @@ def _profile_aliases(profile: Profile) -> set[str]:
 
 
 def _profile_primary_name(profile: Profile) -> str:
-    parts = _strip_suffix_parts([p for p in profile.full_name.split() if not p.endswith(".")])
+    parts = strip_name_suffixes([p for p in profile.full_name.split() if not p.endswith(".")])
     return f"{parts[0]} {parts[-1]}".strip().lower() if len(parts) >= 2 else ""
 
 
@@ -91,10 +80,10 @@ def name_gate(candidate_name: str, profile: Profile) -> bool:
     signal scoring, not by loosening this gate. Generational suffixes (Jr,
     Sr, II..IV) are stripped from both sides first so "Skowronek Jr" still
     gates on "skowronek", not "jr"."""
-    parts = _strip_suffix_parts([p for p in profile.full_name.split() if not p.endswith(".")])
+    parts = strip_name_suffixes([p for p in profile.full_name.split() if not p.endswith(".")])
     if len(parts) < 2:
         return False
-    cand_parts = _strip_suffix_parts(candidate_name.split())
+    cand_parts = strip_name_suffixes(candidate_name.split())
     if len(cand_parts) < 2:
         return False
     if _norm_last(cand_parts[-1]) != _norm_last(parts[-1]):
@@ -168,9 +157,14 @@ def compute_signals(candidate: CandidateListing, profile: Profile) -> dict[str, 
         loc in profile_locs for loc in candidate.locations
     )
 
+    # A city match already implies its state; counting both would let a
+    # same-name stranger in the profile's city reach `found` on location alone.
     profile_state = _profile_state_abbr(profile)
     cand_states = {loc.rsplit(", ", 1)[-1] for loc in candidate.locations if ", " in loc}
-    signals["state"] = None if not cand_states or not profile_state else profile_state in cand_states
+    signals["state"] = (
+        None if signals["location"] or not cand_states or not profile_state
+        else profile_state in cand_states
+    )
 
     # Exclude the profile's own bare "First Last" from the alias set: matching
     # it adds no information beyond what the name gate already required, and

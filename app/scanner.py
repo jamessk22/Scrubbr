@@ -7,7 +7,7 @@ import re
 from urllib.parse import quote, quote_plus
 
 from .models import STATE_ABBR as _STATE_ABBR
-from .models import Profile
+from .models import Profile, strip_name_suffixes
 
 _PLACEHOLDER_RE = re.compile(r"\{(\w+)\}")
 
@@ -22,7 +22,7 @@ SCOPE_UNSCOPED = "unscoped"
 
 def search_context(profile: Profile) -> dict | None:
     """{first, last, city, state} for URL templates; None if the name is incomplete."""
-    parts = [p for p in profile.full_name.split() if not p.endswith(".")]
+    parts = strip_name_suffixes([p for p in profile.full_name.split() if not p.endswith(".")])
     if len(parts) < 2:
         return None
     city = ""

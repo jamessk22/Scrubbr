@@ -29,6 +29,7 @@ class ScanOutcome:
     snapshot: dict | None = None
     url: str = ""
     blocked_status: int = 0  # HTTP status that triggered Blocked, if any (429/503 -> cooldown)
+    transient: bool = False  # browser busy: not a verdict, so never persisted
 
 
 def is_skipped(broker: Broker) -> bool:
@@ -87,6 +88,11 @@ def scan(broker: Broker, profile: Profile, fetch=fetcher.fetch) -> ScanOutcome:
             fetched = fetch(url, result_selector)
         except fetcher.Blocked as exc:
             return ScanOutcome(EXPOSURE_UNREACHABLE, detail=exc.reason, url=url, blocked_status=exc.status)
+        except fetcher.Busy:
+            return ScanOutcome(
+                EXPOSURE_UNREACHABLE, url=url, transient=True,
+                detail="A bulk scan is using the browser; try again when it finishes",
+            )
         except Exception as exc:
             # Browser launch failures, navigation timeouts, etc: a single bad
             # fetch must not crash the whole bulk-scan background task.
@@ -133,7 +139,8 @@ def scan_and_persist(conn, broker: Broker, profile: Profile, fetch=fetcher.fetch
     if existing is not None and existing.source in ("manual", "network"):
         return ScanOutcome(existing.status, detail="Manual verdict kept", url=existing.evidence)
     outcome = scan(broker, profile, fetch=fetch)
-    _persist(conn, broker.id, profile.id, outcome)
+    if not outcome.transient:
+        _persist(conn, broker.id, profile.id, outcome)
     return outcome
 
 

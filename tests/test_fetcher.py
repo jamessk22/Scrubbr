@@ -1,3 +1,7 @@
+import threading
+
+import pytest
+
 from app import fetcher
 from app.fetcher import looks_like_challenge
 
@@ -76,6 +80,7 @@ def test_fetch_reuses_active_browser_session(monkeypatch):
     point of the session is to pay browser startup once per bulk scan."""
     fake = _FakeContext("<html><body>Jane Public, Age 40</body></html>")
     monkeypatch.setattr(fetcher, "_active_context", fake)
+    monkeypatch.setattr(fetcher, "_active_owner", threading.get_ident())
     try:
         result = fetcher.fetch("https://example.test/search")
     finally:
@@ -85,3 +90,21 @@ def test_fetch_reuses_active_browser_session(monkeypatch):
     assert len(fake.pages) == 1
     assert fake.pages[0].closed is True  # per-fetch page is closed...
     assert fake.closed is False  # ...but fetch() must not close a context it doesn't own
+
+
+def test_fetch_from_another_thread_than_the_session_owner_is_busy(monkeypatch):
+    """Playwright's sync API is bound to the thread that started it; reusing a
+    bulk scan's context from a request thread raises a greenlet error."""
+    monkeypatch.setattr(fetcher, "_active_context", _FakeContext("<html></html>"))
+    monkeypatch.setattr(fetcher, "_active_owner", -1)
+    with fetcher._browser_lock:  # held by the owning session for its whole run
+        with pytest.raises(fetcher.Busy):
+            fetcher.fetch("https://example.test/search")
+
+
+def test_fetch_without_session_is_busy_while_browser_dir_is_held(monkeypatch):
+    """A second persistent context on the same .browser/ dir would hit
+    Chromium's profile lock, so fetch() refuses instead of launching."""
+    with fetcher._browser_lock:
+        with pytest.raises(fetcher.Busy):
+            fetcher.fetch("https://example.test/search")

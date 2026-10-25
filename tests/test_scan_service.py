@@ -375,3 +375,13 @@ def test_unscoped_not_found_records_weak_evidence(profile):
     outcome = scan_service.scan(broker, profile, fetch=_fetch_returning(NOT_FOUND_HTML))
     assert outcome.status == EXPOSURE_NOT_FOUND
     assert outcome.snapshot == {"page_scope": "unscoped"}
+
+
+def test_busy_browser_outcome_is_transient_and_not_persisted(conn, db_profile):
+    broker = _broker(conn)
+    outcome = scan_service.scan_and_persist(
+        conn, broker, db_profile, fetch=_fetch_raising(fetcher.Busy("bulk scan running")),
+    )
+    assert outcome.status == EXPOSURE_UNREACHABLE
+    assert outcome.transient is True
+    assert db.get_exposure(conn, broker.id, db_profile.id) is None

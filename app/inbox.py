@@ -92,6 +92,15 @@ def classify(subject: str, body: str) -> str:
     return "unknown"
 
 
+def _safe_decode(data: bytes, charset: str | None) -> str:
+    """Real mail declares charsets Python doesn't know ("unknown-8bit", typos);
+    raising on those would leave the message unseen and abort every poll."""
+    try:
+        return data.decode(charset or "utf-8", errors="replace")
+    except LookupError:
+        return data.decode("utf-8", errors="replace")
+
+
 def _decode(value: str | None) -> str:
     if not value:
         return ""
@@ -99,7 +108,7 @@ def _decode(value: str | None) -> str:
     out = []
     for text, enc in parts:
         if isinstance(text, bytes):
-            out.append(text.decode(enc or "utf-8", errors="replace"))
+            out.append(_safe_decode(text, enc))
         else:
             out.append(text)
     return "".join(out)
@@ -111,21 +120,18 @@ def _plain_body(msg: Message) -> str:
             if part.get_content_type() == "text/plain":
                 payload = part.get_payload(decode=True)
                 if payload:
-                    charset = part.get_content_charset() or "utf-8"
-                    return payload.decode(charset, errors="replace")
+                    return _safe_decode(payload, part.get_content_charset())
         # fall back to first text/html stripped of tags
         for part in msg.walk():
             if part.get_content_type() == "text/html":
                 payload = part.get_payload(decode=True)
                 if payload:
-                    charset = part.get_content_charset() or "utf-8"
-                    html = payload.decode(charset, errors="replace")
+                    html = _safe_decode(payload, part.get_content_charset())
                     return re.sub(r"<[^>]+>", " ", html)
         return ""
     payload = msg.get_payload(decode=True)
     if payload:
-        charset = msg.get_content_charset() or "utf-8"
-        return payload.decode(charset, errors="replace")
+        return _safe_decode(payload, msg.get_content_charset())
     return ""
 
 
@@ -193,29 +199,38 @@ def poll(conn, cfg: ImapConfig, limit: int = 200) -> PollResult:
             msg = email.message_from_bytes(msg_data[0][1])
             result.scanned += 1
 
-            subject = _decode(msg.get("Subject"))
-            from_addr = _decode(msg.get("From"))
-            body = _plain_body(msg)
-            req_id = _request_id_from_subject(subject, cfg.tag_prefix)
+            subject = from_addr = ""
+            req_id = None
+            try:
+                subject = _decode(msg.get("Subject"))
+                from_addr = _decode(msg.get("From"))
+                body = _plain_body(msg)
+                req_id = _request_id_from_subject(subject, cfg.tag_prefix)
 
-            classification = classify(subject, body)
-            needs_review = 0
-            req = db.get_request(conn, req_id) if req_id is not None else None
-            if req is not None:
-                result.matched += 1
-                new_status = _STATUS_BY_CLASS.get(classification)
-                if new_status and req.status in _ADVANCABLE_STATUSES:
-                    db.set_status(
-                        conn, req_id, new_status,
-                        note=f"Auto from reply: {subject[:80]}",
-                    )
-                    result.advanced += 1
+                classification = classify(subject, body)
+                needs_review = 0
+                req = db.get_request(conn, req_id) if req_id is not None else None
+                if req is not None:
+                    result.matched += 1
+                    new_status = _STATUS_BY_CLASS.get(classification)
+                    if new_status and req.status in _ADVANCABLE_STATUSES:
+                        db.set_status(
+                            conn, req_id, new_status,
+                            note=f"Auto from reply: {subject[:80]}",
+                        )
+                        result.advanced += 1
+                    else:
+                        needs_review = 1
                 else:
+                    # Couldn't tie it to a request. A tag for a request that no
+                    # longer exists must not be stored: the FK would reject it.
                     needs_review = 1
-            else:
-                # couldn't tie it to a request, or classification unknown
-                needs_review = 1
-                req_id = req_id if req_id else None
+                    req_id = None
+            except Exception as exc:
+                # Still record it below: an unrecorded message stays unseen and
+                # aborts every later poll at the same spot.
+                result.errors.append(f"{message_id}: {exc}")
+                classification, needs_review, req_id = "error", 1, None
 
             if needs_review:
                 result.review += 1

@@ -198,3 +198,38 @@ def test_poll_skips_full_fetch_for_already_seen_messages(conn, profile_id, monke
     assert result.scanned == 0
     assert client.header_fetches == [b"1"]
     assert client.body_fetches == []
+
+
+def test_unknown_charset_body_decodes_instead_of_raising():
+    raw = b"Subject: x\r\nContent-Type: text/plain; charset=unknown-8bit\r\n\r\nhello\r\n"
+    assert "hello" in inbox._plain_body(email.message_from_bytes(raw))
+
+
+def test_unknown_charset_header_decodes_instead_of_raising():
+    assert inbox._decode("=?x-bogus?q?hi?=") == "hi"
+
+
+def test_poll_records_a_message_that_fails_to_parse(conn, profile_id, monkeypatch):
+    """One unparseable message must not abort the poll, or it stays unseen
+    and kills every later poll at the same spot."""
+    raw = _raw_message("<bad@x.test>", "Re: request", "body")
+    _install_fake_client(monkeypatch, {b"1": raw})
+    def boom(msg):
+        raise ValueError("unparseable")
+    monkeypatch.setattr(inbox, "_plain_body", boom)
+
+    result = inbox.poll(conn, _cfg())
+
+    assert result.errors
+    assert db.message_seen(conn, "<bad@x.test>")
+    assert [m["message_id"] for m in db.review_queue(conn)] == ["<bad@x.test>"]
+
+
+def test_poll_survives_tag_for_a_request_that_no_longer_exists(conn, monkeypatch):
+    raw = _raw_message("<gone@x.test>", "Re: request [PIR-99999]", "Your data has been deleted.")
+    _install_fake_client(monkeypatch, {b"1": raw})
+
+    result = inbox.poll(conn, _cfg())
+
+    assert result.review == 1
+    assert [m["request_id"] for m in db.review_queue(conn)] == [None]

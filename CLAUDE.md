@@ -49,6 +49,8 @@ framework. `app/main.py` holds every route; the rest of `app/` is a thin layered
   subject tag (`request_tag`); classification advances status, and anything ambiguous or
   unmatched is flagged `needs_review` for the review queue. **Never sends/replies/deletes.**
   Verification demands are checked before confirmations on purpose (safest when a reply has both).
+  A message that fails to parse, or whose tag names a request that no longer exists, is still
+  recorded (needs review) so it can't poison later polls.
 - **`sender.py`** — delivery seam. Builds `mailto:` links (manual fallback for form brokers) and,
   for email-capable brokers, sends via SMTP (`SmtpConfig`, `build_message`, `open_smtp`, `send`).
   This is the designated insertion point for v2 Playwright form auto-send; keep routes calling
@@ -67,7 +69,10 @@ framework. `app/main.py` holds every route; the rest of `app/` is a thin layered
   the template needs (e.g. `{city}`), which `scan_service` maps to `unreachable` rather than
   fetching a garbage nationwide page. **`fetcher.py`** is the only module that touches the network
   (Playwright, persistent context in gitignored `.browser/`) — everything above it is tested
-  against canned HTML. `looks_like_challenge` and the "no results" marker check in **`extract.py`**
+  against canned HTML. Playwright's sync API is thread-bound and Chromium locks `.browser/`, so a
+  `browser_session()` is reused only by its owning thread; a fetch from any other thread while
+  the browser is held raises `Busy`, which `scan_service` returns as a transient outcome and
+  never persists. `looks_like_challenge` and the "no results" marker check in **`extract.py`**
   both check **visible text only** (scripts stripped), since result pages routinely embed invisible
   reCAPTCHA/Cloudflare beacons and JSON state blobs with fallback "no matches" copy that would
   otherwise misread as a bot wall or false not-found. `extract.py` turns HTML into `CandidateListing`s
@@ -75,6 +80,8 @@ framework. `app/main.py` holds every route; the rest of `app/` is a thin layered
   generic regex fallback; no candidates + no "no results" marker is `PARSE_FAILED`, never a silent
   not-found. **`matcher.py`** scores a candidate against the `Profile` — `found` needs ≥2 matched
   signals *and* ≥60% score, so a same-name/same-age stranger caps out at `possible`, never `found`.
+  A city match counts once: `state` is only compared when `location` didn't match, since a
+  matching city already implies its state.
   **`scan_service.scan_and_persist`** is what routes call: it checks for a prior *manual* verdict
   (never overwritten by an auto scan) before touching the network. `scan.skip: true` (JS wizard /
   empty shell / bot wall) is treated as non-scannable — `unreachable`, manual link only, without

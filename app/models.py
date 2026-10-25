@@ -19,6 +19,16 @@ STATE_ABBR = {
     "wisconsin": "WI", "wyoming": "WY", "district of columbia": "DC",
 }
 
+NAME_SUFFIXES = {"jr", "sr", "ii", "iii", "iv"}
+
+
+def strip_name_suffixes(parts: list[str]) -> list[str]:
+    """Drop trailing generational suffixes (Jr, Sr, II..IV) so the last real
+    surname token is what gets searched and compared on, not "jr"."""
+    while parts and parts[-1].strip(".").lower() in NAME_SUFFIXES:
+        parts = parts[:-1]
+    return parts
+
 
 # Contact methods a broker accepts.
 CONTACT_EMAIL = "email"
