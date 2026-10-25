@@ -1,19 +1,25 @@
 import smtplib
+import ssl
+
+import pytest
 
 from app import inbox, sender, templater
 from app.models import Broker
 
 
 class FakeSmtp:
-    def __init__(self, host, port):
+    def __init__(self, host, port, context=None):
         self.host, self.port = host, port
+        self.context = context
         self.started_tls = False
+        self.closed = False
         self.login_args = None
         self.sent = []
         self.quit_called = False
 
-    def starttls(self):
+    def starttls(self, context=None):
         self.started_tls = True
+        self.context = context
 
     def login(self, username, password):
         self.login_args = (username, password)
@@ -23,6 +29,14 @@ class FakeSmtp:
 
     def quit(self):
         self.quit_called = True
+
+    def close(self):
+        self.closed = True
+
+
+def _assert_verifying(context):
+    assert context.verify_mode == ssl.CERT_REQUIRED
+    assert context.check_hostname is True
 
 
 def _broker():
@@ -91,15 +105,16 @@ def test_open_smtp_starttls_then_login(monkeypatch):
     client = sender.open_smtp(cfg)
     assert client is fake
     assert fake.started_tls is True
+    _assert_verifying(fake.context)
     assert fake.login_args == ("u", "p")
 
 
 def test_open_smtp_ssl_skips_starttls(monkeypatch):
     fake = None
 
-    def factory(host, port):
+    def factory(host, port, context=None):
         nonlocal fake
-        fake = FakeSmtp(host, port)
+        fake = FakeSmtp(host, port, context)
         return fake
 
     monkeypatch.setattr(smtplib, "SMTP_SSL", factory)
@@ -109,4 +124,27 @@ def test_open_smtp_ssl_skips_starttls(monkeypatch):
     client = sender.open_smtp(cfg)
     assert client is fake
     assert fake.started_tls is False
+    _assert_verifying(fake.context)
     assert fake.login_args == ("u", "p")
+
+
+def test_open_smtp_closes_socket_when_starttls_fails(monkeypatch):
+    fake = None
+
+    class FailingTls(FakeSmtp):
+        def starttls(self, context=None):
+            raise ssl.SSLCertVerificationError("bad cert")
+
+    def factory(host, port):
+        nonlocal fake
+        fake = FailingTls(host, port)
+        return fake
+
+    monkeypatch.setattr(smtplib, "SMTP", factory)
+    cfg = sender.SmtpConfig.from_dict({
+        "smtp": {"host": "smtp.example.com", "port": 587, "username": "u", "password": "p"},
+    })
+    with pytest.raises(ssl.SSLCertVerificationError):
+        sender.open_smtp(cfg)
+    assert fake.closed is True
+    assert fake.login_args is None

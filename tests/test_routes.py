@@ -35,7 +35,7 @@ def client(tmp_path, monkeypatch):
     conn.commit()
     conn.close()
 
-    c = TestClient(main.app)
+    c = TestClient(main.app, base_url="http://127.0.0.1")
     c.broker_id = broker_id
     c.profile_id = profile.id
     return c
@@ -151,6 +151,46 @@ def test_scan_mark_rejects_offsite_back_param(client):
     assert resp.headers["location"] == f"/scan?profile_id={client.profile_id}"
 
 
+def test_foreign_host_rejected(client):
+    resp = client.get("/", headers={"Host": "evil.example"})
+    assert resp.status_code == 400
+
+
+def _mark_found(client, headers):
+    return client.post(f"/scan/{client.broker_id}/mark", data={
+        "profile_id": client.profile_id, "status": "found",
+    }, headers=headers, follow_redirects=False)
+
+
+def _stored_exposure(client):
+    conn = main.get_conn()
+    exp = db.get_exposure(conn, client.broker_id, client.profile_id)
+    conn.close()
+    return exp
+
+
+@pytest.mark.parametrize("headers", [
+    {"Origin": "https://evil.example"},
+    {"Sec-Fetch-Site": "cross-site"},
+    {"Origin": "null"},
+])
+def test_cross_origin_post_rejected(client, headers):
+    resp = _mark_found(client, headers)
+    assert resp.status_code == 403
+    assert _stored_exposure(client) is None
+
+
+@pytest.mark.parametrize("headers", [
+    {"Origin": "http://127.0.0.1"},
+    {"Origin": "http://127.0.0.1", "Sec-Fetch-Site": "same-origin"},
+    {},
+])
+def test_same_origin_post_allowed(client, headers):
+    resp = _mark_found(client, headers)
+    assert resp.status_code == 303
+    assert _stored_exposure(client).status == "found"
+
+
 def _seed_network(client, names):
     conn = main.get_conn()
     for name in names:
@@ -219,7 +259,7 @@ class FakeSmtp:
     def __init__(self, host, port):
         self.sent = []
 
-    def starttls(self):
+    def starttls(self, context=None):
         pass
 
     def login(self, u, p):

@@ -6,6 +6,7 @@ import email
 import hashlib
 import imaplib
 import re
+import ssl
 from dataclasses import dataclass
 from datetime import datetime
 from email.header import decode_header
@@ -157,7 +158,9 @@ def poll(conn, cfg: ImapConfig, limit: int = 200) -> PollResult:
     """
     result = PollResult(errors=[])
     try:
-        client = imaplib.IMAP4_SSL(cfg.host, cfg.port)
+        client = imaplib.IMAP4_SSL(
+            cfg.host, cfg.port, ssl_context=ssl.create_default_context()
+        )
         client.login(cfg.username, cfg.password)
         client.select(cfg.folder, readonly=True)
     except Exception as e:  # network/auth failures shouldn't crash the app

@@ -6,9 +6,10 @@ import threading
 from collections import Counter
 
 from fastapi import BackgroundTasks, FastAPI, Form, Request as HttpRequest
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from . import db, fetcher, inbox, ratelimit, scan_service, scanner, send_service, sender, templater
 from .config import ROOT, load_config
@@ -34,6 +35,26 @@ from .models import (
 )
 
 app = FastAPI(title="Scrubbr")
+app.add_middleware(TrustedHostMiddleware, allowed_hosts=["127.0.0.1", "localhost"])
+
+SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
+
+
+@app.middleware("http")
+async def reject_cross_origin(request: HttpRequest, call_next):
+    """CSRF guard: any site the user visits could auto-submit a form POST here
+    (no CORS preflight for simple forms). Browsers always send Sec-Fetch-Site
+    and/or Origin on such requests; non-browser clients aren't a CSRF vector."""
+    if request.method not in SAFE_METHODS:
+        fetch_site = request.headers.get("sec-fetch-site")
+        origin = request.headers.get("origin")
+        if (fetch_site is not None and fetch_site not in {"same-origin", "none"}) or (
+            origin is not None and origin != f"{request.url.scheme}://{request.url.netloc}"
+        ):
+            return PlainTextResponse("Cross-origin request rejected.", 403)
+    return await call_next(request)
+
+
 app.mount("/static", StaticFiles(directory=str(ROOT / "app" / "static")), name="static")
 views = Jinja2Templates(directory=str(ROOT / "app" / "templates"))
 
