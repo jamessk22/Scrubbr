@@ -109,6 +109,23 @@ def test_brokers_list_and_detail_show_defunct(client):
     assert "marked defunct: NXDOMAIN 2026-10-13" in resp.text
 
 
+DROP_URL = "https://consumer.drop.privacy.ca.gov"
+
+
+def test_dashboard_drop_notice_only_for_california(client):
+    assert DROP_URL not in client.get("/").text
+
+    conn = main.get_conn()
+    db.create_profile(conn, {
+        "name": "CA", "full_name": "Cal Resident", "aliases": "",
+        "emails": "", "phones": "", "addresses": "",
+        "date_of_birth": "", "state": "CA",
+    })
+    conn.commit()
+    conn.close()
+    assert DROP_URL in client.get("/").text
+
+
 def test_brokers_sort_preserves_filter_in_header_link(client):
     resp = client.get("/brokers?category=people-search&sort=broker&dir=asc")
     assert resp.status_code == 200

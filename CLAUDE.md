@@ -90,6 +90,9 @@ framework. `app/main.py` holds every route; the rest of `app/` is a thin layered
   `/scan/{id}/mark` (picking `unknown` calls `db.clear_exposure`, deleting the row so the derived state
   returns), status posts to `/broker/{id}/status`. Both carry a `back` field so the badge redirects to the
   page it was clicked from — validate it through `_safe_redirect_target`, never trust it raw.
+  **`Broker.defunct`** (domain seized / dead) keeps the row and its history but excludes the
+  broker from `eligible_broker_ids`, `is_auto_scannable`, the dashboard meter/rows/due list, and
+  every `/scan` list; `/brokers` and `/broker/{id}` still show it, marked Defunct.
   **Drift monitor**: `exposures.fail_streak` bumps on consecutive `unreachable`; `db.drifting_brokers`
   surfaces a "needs attention" list (excluding `scan.skip` brokers).
   **Only brokers with a `search_url` in `data/brokers.json` are scan-eligible**, and only those without
@@ -109,8 +112,14 @@ framework. `app/main.py` holds every route; the rest of `app/` is a thin layered
   for `email`/`both` brokers whose effective exposure isn't `not_found`. Follow-up re-sends
   (`next_due`) and `form` brokers stay a manual click. Don't widen this scope without it being an
   explicit task.
+- **Host + Origin checks in `main.py`** (`TrustedHostMiddleware` + `reject_cross_origin`) are the
+  CSRF/DNS-rebinding defense. Never add `Referrer-Policy: no-referrer`: it makes Chromium send
+  `Origin: null` on same-origin form POSTs, which the check rejects. Tests need
+  `TestClient(..., base_url="http://127.0.0.1")`.
 - **`data/brokers.json` is the source of truth** for the broker registry — edit it and re-seed
-  rather than writing brokers directly to the DB. A broker's `jurisdiction` marks its regime
+  rather than writing brokers directly to the DB. `data/brokers.local.json` (gitignored, same
+  schema) holds personal additions. `seed_brokers.load_brokers` appends it and exits on any
+  normalized-name collision with the shared list. A broker's `jurisdiction` marks its regime
   (`US` vs `GDPR`/`UK-GDPR`) and `category` sets its follow-up cadence, so those fields are
   load-bearing, not cosmetic. For US brokers the exact state-law template comes from the user's
   `profile.state`, not the broker.

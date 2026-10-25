@@ -83,6 +83,20 @@ verdicted `not_found` are eligible; follow-up re-sends and form-only brokers
 always stay manual. A full run of the ~75 email-capable brokers takes several
 minutes and is well under Gmail's ~500 recipients/day limit.
 
+### Optional: custom local brokers
+
+To track sites that aren't in the shared registry, create
+`data/brokers.local.json` (gitignored) as `{"brokers": [...]}`, with entries in the
+same schema as `data/brokers.json`, then re-seed. A local name that duplicates an
+existing broker makes the seed fail. Removing an entry later leaves its DB row in
+place, same as removing one from `brokers.json`.
+
+### Security notes
+
+IMAP and SMTP verify TLS certificates, so self-signed mail servers won't connect.
+The app accepts only `127.0.0.1`/`localhost` as Host and rejects cross-origin
+POSTs, which stops other websites from submitting forms to it (CSRF and DNS rebinding).
+
 ## Tests
 
 ```sh

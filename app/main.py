@@ -176,6 +176,7 @@ def dashboard(request: HttpRequest, profile_id: str = "", show_all: str = "", so
             "profiles": profiles, "selected_profile": selected, "multi_profile": len(profiles) > 1,
             "imap_enabled": cfg.get("imap", {}).get("enabled", False),
             "sort": sort, "dir": dir,
+            "show_drop": any(p.is_california() for p in scope),
         })
     finally:
         conn.close()
