@@ -12,13 +12,18 @@ never leaves your computer.
 
 ## What it does (v1)
 
-- **Broker directory** — 130 curated high-priority US brokers (people-search,
-  marketing, risk, recruitment) with opt-out URLs/emails, contact method, legal
-  basis, and difficulty. Seeded from `data/brokers.json`; easy to extend.
-- **Local profile** — your identifiers (name, aliases, emails, phones,
-  addresses, DOB), stored in SQLite, used only to fill request templates.
+- **Broker directory** — 130 curated high-priority brokers (124 US, 6 GDPR/UK-GDPR;
+  people-search, marketing, risk, recruitment) with opt-out URLs/emails, contact
+  method, legal basis, and difficulty. Seeded from `data/brokers.json`; easy to
+  extend. Brokers whose sites have been taken down (currently Radaris, Rehold,
+  Verecor) are flagged `defunct`: kept with their history, but excluded from the
+  dashboard count, sending, and scanning.
+- **Local profiles** — one or more people's identifiers (name, aliases, emails,
+  phones, addresses, DOB, state), stored in SQLite, used only to fill request
+  templates.
 - **Request generation** — per-broker legal deletion + opt-out requests from
-  Jinja2 templates, chosen by jurisdiction (CCPA / GDPR / generic multi-state).
+  Jinja2 templates. GDPR/UK-GDPR brokers get the GDPR template; US brokers get
+  CCPA if the profile lives in California, otherwise a generic multi-state one.
 - **Sending** — each broker gets an action page: for email brokers, a `mailto:`
   link and copyable text; for form brokers, the opt-out URL plus step-by-step
   instructions and your details to paste. Email-capable brokers can also be sent
@@ -26,7 +31,8 @@ never leaves your computer.
   always stay manual.
 - **Status tracking** — per-broker pipeline (`not started → sent → confirmed /
   rejected / needs verification`) with history, plus a dashboard with counters
-  and a "due for follow-up" list.
+  and a "due for follow-up" list. California profiles also get a pointer to the
+  state's DROP one-shot deletion platform.
 - **IMAP reply monitoring** — point it at a mailbox/label; it correlates broker
   replies (via a `[PIR-<id>]` subject tag), classifies them, and auto-advances
   statuses. Ambiguous mail goes to a **review queue**; it never sends, replies,
@@ -41,14 +47,15 @@ never leaves your computer.
   check** (blocked/timeout, falls back to a manual search link). Go to the
   **Scan** page and click **Scan** (single broker) or **Scan all**; each
   scan launches a real browser and is rate-limited, so expect ~10-25s per
-  broker, more for a bulk run.
-  **Only 5 of the 130 brokers are currently wired up for this** — Whitepages,
-  Radaris, FastPeopleSearch, TruePeopleSearch, That'sThem — because each one
-  needs real CSS selectors hand-verified against its live results page
-  (`scan` key in `data/brokers.json`). Every other broker, even ones that do
-  have a public search in reality (e.g. CheckPeople), shows up under "Not
-  publicly searchable" until someone adds a `scan` config for it — that's
-  manual coverage growth, not something scanning unlocks automatically.
+  broker, more for a bulk run. Brokers in the same `network` (shared owner or
+  database) inherit a derived **likely exposed** verdict when one sibling is found.
+  **Coverage is partial.** 19 brokers have a search URL (`scan` key in
+  `data/brokers.json`). 10 of them are auto-scanned, but only 3 (USPhonebook,
+  Advanced Background Checks, AnyWho) have selectors verified against a live
+  page; the rest use unverified selectors or the generic fallback. The other
+  8 are manual-link only (JS wizards / bot walls). Every other broker shows up
+  under "Not publicly searchable" until someone adds and verifies a `scan`
+  config for it (`python -m scripts.verify_scan`).
 
 ## Setup
 
@@ -57,10 +64,11 @@ python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt
 .venv/bin/playwright install chromium         # one-time, for exposure scanning
 .venv/bin/python -m scripts.seed_brokers      # load broker registry
-.venv/bin/uvicorn app.main:app --port 3000    # http://127.0.0.1:3000
+.venv/bin/uvicorn app.main:app --port 8137    # http://127.0.0.1:8137
 ```
 
-Then open the dashboard, fill in your **Profile**, and work through the brokers.
+Then open the dashboard, add a **Profile**, and work through the brokers. Open it
+via `127.0.0.1` or `localhost`; other hostnames are rejected.
 
 ### Optional: inbox monitoring
 
@@ -80,7 +88,7 @@ not-yet-sent email/both broker without sending anything; **Send for real**
 opens one SMTP connection and works through the (editable) selection with a
 jittered pause between messages. Only brokers still `not_started` and not
 verdicted `not_found` are eligible; follow-up re-sends and form-only brokers
-always stay manual. A full run of the ~75 email-capable brokers takes several
+always stay manual. A full run of the ~73 email-capable brokers takes several
 minutes and is well under Gmail's ~500 recipients/day limit.
 
 ### Optional: custom local brokers
@@ -104,20 +112,23 @@ POSTs, which stops other websites from submitting forms to it (CSRF and DNS rebi
 ```
 
 Covers template rendering, status transitions / follow-up dates, reply
-classification, and the scan pipeline (match scoring, HTML extraction, rate
-limiting, outcome persistence) — all against saved HTML fixtures, no live
-network calls.
+classification, SMTP sending, routes (including the Host/Origin checks), broker
+data and seeding, and the scan pipeline (match scoring, HTML extraction, rate
+limiting, outcome persistence) — all against fakes and saved HTML fixtures, no
+live network calls.
 
 ## Project layout
 
 ```
-app/       main.py (routes) · db.py · models.py · templater.py · inbox.py · sender.py
+app/       main.py (routes) · config.py · db.py · models.py · templater.py · inbox.py
+           sender.py · send_service.py
            scanner.py · fetcher.py · extract.py · matcher.py · ratelimit.py · scan_service.py
-           send_service.py
-           templates/ (HTML) · static/style.css
-data/      brokers.json · request_templates/ (ccpa/gdpr/generic + _identity)
-scripts/   seed_brokers.py
-tests/
+           templates/ (HTML) · static/ (style.css, fonts)
+data/      brokers.json · brokers.local.json (optional, gitignored)
+           request_templates/ (ccpa/gdpr/generic + _identity)
+scripts/   seed_brokers.py · verify_scan.py
+tests/     fixtures/ (synthetic scan pages)
+mockups/   ui-preview.html
 ```
 
 ## Caveats
@@ -126,12 +137,10 @@ tests/
   process before relying on it; update `data/brokers.json` and re-seed.
 - Some brokers require phone/ID verification or re-list data quickly (flagged by
   the `difficulty` field and notes) — those need manual follow-up.
-- **Address format matters for scanning.** `scanner.search_context()` extracts the
-  city from the *first line* of `profile.addresses` by splitting on the last comma
-  and assumes `"street, city state zip"` (one comma before the city). An address
-  written `"street, city, state zip"` (two commas, e.g. `"10 Beacon St, Boston,
-  MA 02108"`) yields an empty city and breaks the search URL. Known bug,
-  not yet fixed — format addresses as one comma before city/state/zip to avoid it.
+- **Scanning uses the first address line only.** `scanner.search_context()` takes
+  the city from it (`"street, city, ST zip"` and `"street, city ST zip"` both
+  work). A profile with no parseable city can't scan brokers whose search URL
+  needs `{city}`; those show as couldn't-check rather than searching nationwide.
 - This is a personal tool, not legal advice.
 
 ## v2 roadmap

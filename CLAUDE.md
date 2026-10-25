@@ -34,7 +34,7 @@ framework. `app/main.py` holds every route; the rest of `app/` is a thin layered
   per tracked person), `requests` (unique on `(broker_id, profile_id)`, **auto-created lazily**
   by `get_or_create_request`), `request_history`, `exposures` (also unique on `(broker_id,
   profile_id)` — the scan pipeline's per-profile verdict), `seen_messages` (makes IMAP polling
-  idempotent). `set_status` is the only status mutator — it writes history and, on `sent`,
+  idempotent), `scan_cooldowns` (`ratelimit.py`'s persisted per-domain 429/503 cooldowns). `set_status` is the only status mutator — it writes history and, on `sent`,
   stamps `next_due` from the broker's category.
 - **`models.py`** — dataclasses + the status/contact-method/cadence constants. The status pipeline
   is `not_started → sent → confirmed | rejected | needs_verification`; `TERMINAL_STATUSES` and
@@ -54,7 +54,7 @@ framework. `app/main.py` holds every route; the rest of `app/` is a thin layered
   This is the designated insertion point for v2 Playwright form auto-send; keep routes calling
   through it.
 - **`send_service.py`** — orchestrates automatic sending: `eligible_broker_ids` (email/both,
-  `opt_out_email` set, request still `not_started`, exposure not `not_found`) and
+  not defunct, `opt_out_email` set, request still `not_started`, exposure not `not_found`) and
   `send_and_persist`, which only calls `db.set_status(..., STATUS_SENT)` after SMTP accepts the
   message — a failure leaves the request `not_started` so the next run retries it, and writes no
   history row. **`sender.build_message` never sets `Reply-To`**: the From address must be the same
@@ -127,7 +127,10 @@ framework. `app/main.py` holds every route; the rest of `app/` is a thin layered
   inbound reply. Any change to how subjects are generated must stay in sync with the regex in
   `inbox.py`.
 - **Config falls back gracefully**: `config.py` loads `config.toml` if present, else
-  `config.example.toml`, so the app runs with IMAP disabled out of the box.
+  `config.example.toml`, so the app runs with IMAP and SMTP disabled out of the box.
+- **Mail TLS is always verified**: `inbox.poll` and `sender.open_smtp` pass
+  `ssl.create_default_context()` (the stdlib default without one is *unverified*). No insecure
+  fallback or config toggle.
 - Broker opt-out URLs/emails drift constantly and are unverified — treat them as needing
   confirmation, not as ground truth.
 - **A new broker's `search_url` may come from web research**, recorded with a `scan` stub of
