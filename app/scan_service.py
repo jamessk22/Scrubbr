@@ -39,7 +39,7 @@ def is_skipped(broker: Broker) -> bool:
 
 
 def is_auto_scannable(broker: Broker) -> bool:
-    return bool(broker.search_url) and not is_skipped(broker)
+    return bool(broker.search_url) and not is_skipped(broker) and not broker.defunct
 
 
 def _url_template(broker: Broker, scan_config: dict | None) -> str:

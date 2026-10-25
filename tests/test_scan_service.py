@@ -297,6 +297,8 @@ def test_is_auto_scannable():
         Broker(id=1, name="X", category="people-search", search_url=SCAN_CONFIG["search_url"]))
     assert not scan_service.is_auto_scannable(_skip_broker())
     assert not scan_service.is_auto_scannable(Broker(id=2, name="Y", category="marketing"))
+    assert not scan_service.is_auto_scannable(
+        Broker(id=3, name="Z", category="people-search", search_url=SCAN_CONFIG["search_url"], defunct=True))
 
 
 def test_stale_searchable_broker_ids_excludes_skipped(conn, profile_id):

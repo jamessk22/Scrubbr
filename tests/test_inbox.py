@@ -1,5 +1,6 @@
 import email
 import imaplib
+import ssl
 
 from app import db, inbox
 from app.inbox import _fallback_message_id, classify
@@ -104,7 +105,11 @@ class FakeImapClient:
 
 def _install_fake_client(monkeypatch, messages: dict[bytes, bytes]) -> FakeImapClient:
     client = FakeImapClient(messages)
-    monkeypatch.setattr(imaplib, "IMAP4_SSL", lambda host, port: client)
+    def factory(host, port, ssl_context=None):
+        client.ssl_context = ssl_context
+        return client
+
+    monkeypatch.setattr(imaplib, "IMAP4_SSL", factory)
     return client
 
 
@@ -118,6 +123,15 @@ def _sent_request(conn, profile_id):
     req = db.get_or_create_request(conn, broker.id, profile_id)
     db.set_status(conn, req.id, STATUS_SENT)
     return req
+
+
+def test_poll_verifies_tls_certificate(conn, monkeypatch):
+    client = _install_fake_client(monkeypatch, {})
+
+    inbox.poll(conn, _cfg())
+
+    assert client.ssl_context.verify_mode == ssl.CERT_REQUIRED
+    assert client.ssl_context.check_hostname is True
 
 
 def test_poll_advances_in_flight_request(conn, profile_id, monkeypatch):

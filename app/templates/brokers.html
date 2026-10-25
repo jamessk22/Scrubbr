@@ -61,7 +61,7 @@
     <tbody>
     {% for broker, profile, r, exposure in rows %}
         <tr>
-            <td data-label="Broker"><a href="/broker/{{ broker.id }}?profile_id={{ profile.id }}">{{ broker.name }}</a></td>
+            <td data-label="Broker"><a href="/broker/{{ broker.id }}?profile_id={{ profile.id }}">{{ broker.name }}</a>{% if broker.defunct %} <span class="pill warn">Defunct</span>{% endif %}</td>
             {% if multi_profile %}<td data-label="Profile" class="muted">{{ profile.name }}</td>{% endif %}
             <td data-label="Category" class="muted">{{ broker.category }}</td>
             <td data-label="Method" class="muted">{{ broker.contact_method }}</td>

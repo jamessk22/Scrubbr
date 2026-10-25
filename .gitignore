@@ -12,3 +12,8 @@ scan_profile.toml
 .DS_Store
 settings.local.json
 docs/
+*.db-wal
+*.db-shm
+.env
+.env.*
+data/brokers.local.json

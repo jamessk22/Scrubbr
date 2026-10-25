@@ -35,7 +35,7 @@ def client(tmp_path, monkeypatch):
     conn.commit()
     conn.close()
 
-    c = TestClient(main.app)
+    c = TestClient(main.app, base_url="http://127.0.0.1")
     c.broker_id = broker_id
     c.profile_id = profile.id
     return c
@@ -78,6 +78,52 @@ def test_dashboard_sort_broker_asc_desc(client):
     assert resp.text.index("Zeta Broker") < resp.text.index("Acme Broker")
     resp = client.get("/?show_all=1&sort=broker&dir=asc")
     assert resp.text.index("Acme Broker") < resp.text.index("Zeta Broker")
+
+
+def _seed_defunct_overdue(client):
+    conn = main.get_conn()
+    db.upsert_broker(conn, {"name": "Gone Broker", "category": "people-search",
+                            "defunct": True, "notes": "NXDOMAIN 2026-10-13"})
+    broker_id = next(b.id for b in db.all_brokers(conn) if b.name == "Gone Broker")
+    req = db.get_or_create_request(conn, broker_id, client.profile_id)
+    db.set_status(conn, req.id, "sent")
+    conn.execute("UPDATE requests SET next_due = '2000-01-01' WHERE id = ?", (req.id,))
+    conn.commit()
+    conn.close()
+    return broker_id
+
+
+def test_dashboard_excludes_defunct_from_meter_rows_and_due(client):
+    _seed_defunct_overdue(client)
+    resp = client.get("/?show_all=1")
+    assert resp.status_code == 200
+    assert "Gone Broker" not in resp.text
+    assert "1 broker<" in resp.text
+
+
+def test_brokers_list_and_detail_show_defunct(client):
+    broker_id = _seed_defunct_overdue(client)
+    resp = client.get("/brokers?show_all=1")
+    assert "Gone Broker" in resp.text and "Defunct" in resp.text
+    resp = client.get(f"/broker/{broker_id}")
+    assert "marked defunct: NXDOMAIN 2026-10-13" in resp.text
+
+
+DROP_URL = "https://consumer.drop.privacy.ca.gov"
+
+
+def test_dashboard_drop_notice_only_for_california(client):
+    assert DROP_URL not in client.get("/").text
+
+    conn = main.get_conn()
+    db.create_profile(conn, {
+        "name": "CA", "full_name": "Cal Resident", "aliases": "",
+        "emails": "", "phones": "", "addresses": "",
+        "date_of_birth": "", "state": "CA",
+    })
+    conn.commit()
+    conn.close()
+    assert DROP_URL in client.get("/").text
 
 
 def test_brokers_sort_preserves_filter_in_header_link(client):
@@ -151,6 +197,46 @@ def test_scan_mark_rejects_offsite_back_param(client):
     assert resp.headers["location"] == f"/scan?profile_id={client.profile_id}"
 
 
+def test_foreign_host_rejected(client):
+    resp = client.get("/", headers={"Host": "evil.example"})
+    assert resp.status_code == 400
+
+
+def _mark_found(client, headers):
+    return client.post(f"/scan/{client.broker_id}/mark", data={
+        "profile_id": client.profile_id, "status": "found",
+    }, headers=headers, follow_redirects=False)
+
+
+def _stored_exposure(client):
+    conn = main.get_conn()
+    exp = db.get_exposure(conn, client.broker_id, client.profile_id)
+    conn.close()
+    return exp
+
+
+@pytest.mark.parametrize("headers", [
+    {"Origin": "https://evil.example"},
+    {"Sec-Fetch-Site": "cross-site"},
+    {"Origin": "null"},
+])
+def test_cross_origin_post_rejected(client, headers):
+    resp = _mark_found(client, headers)
+    assert resp.status_code == 403
+    assert _stored_exposure(client) is None
+
+
+@pytest.mark.parametrize("headers", [
+    {"Origin": "http://127.0.0.1"},
+    {"Origin": "http://127.0.0.1", "Sec-Fetch-Site": "same-origin"},
+    {},
+])
+def test_same_origin_post_allowed(client, headers):
+    resp = _mark_found(client, headers)
+    assert resp.status_code == 303
+    assert _stored_exposure(client).status == "found"
+
+
 def _seed_network(client, names):
     conn = main.get_conn()
     for name in names:
@@ -219,7 +305,7 @@ class FakeSmtp:
     def __init__(self, host, port):
         self.sent = []
 
-    def starttls(self):
+    def starttls(self, context=None):
         pass
 
     def login(self, u, p):

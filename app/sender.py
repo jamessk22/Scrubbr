@@ -9,6 +9,7 @@ for email-capable brokers, used by send_service.py.
       - Browser automation (Playwright) for form-only brokers.
 """
 import smtplib
+import ssl
 from dataclasses import dataclass
 from email.message import EmailMessage
 from email.utils import formatdate, make_msgid
@@ -69,11 +70,16 @@ def build_message(cfg: SmtpConfig, to_addr: str, rendered: RenderedRequest) -> E
 
 def open_smtp(cfg: SmtpConfig):
     """An authenticated SMTP client. Caller is responsible for client.quit()."""
+    context = ssl.create_default_context()
     if cfg.use_ssl:
-        client = smtplib.SMTP_SSL(cfg.host, cfg.port)
+        client = smtplib.SMTP_SSL(cfg.host, cfg.port, context=context)
     else:
         client = smtplib.SMTP(cfg.host, cfg.port)
-        client.starttls()
+        try:
+            client.starttls(context=context)
+        except Exception:
+            client.close()
+            raise
     client.login(cfg.username, cfg.password)
     return client
 

@@ -6,9 +6,10 @@ import threading
 from collections import Counter
 
 from fastapi import BackgroundTasks, FastAPI, Form, Request as HttpRequest
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from . import db, fetcher, inbox, ratelimit, scan_service, scanner, send_service, sender, templater
 from .config import ROOT, load_config
@@ -34,6 +35,26 @@ from .models import (
 )
 
 app = FastAPI(title="Scrubbr")
+app.add_middleware(TrustedHostMiddleware, allowed_hosts=["127.0.0.1", "localhost"])
+
+SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
+
+
+@app.middleware("http")
+async def reject_cross_origin(request: HttpRequest, call_next):
+    """CSRF guard: any site the user visits could auto-submit a form POST here
+    (no CORS preflight for simple forms). Browsers always send Sec-Fetch-Site
+    and/or Origin on such requests; non-browser clients aren't a CSRF vector."""
+    if request.method not in SAFE_METHODS:
+        fetch_site = request.headers.get("sec-fetch-site")
+        origin = request.headers.get("origin")
+        if (fetch_site is not None and fetch_site not in {"same-origin", "none"}) or (
+            origin is not None and origin != f"{request.url.scheme}://{request.url.netloc}"
+        ):
+            return PlainTextResponse("Cross-origin request rejected.", 403)
+    return await call_next(request)
+
+
 app.mount("/static", StaticFiles(directory=str(ROOT / "app" / "static")), name="static")
 views = Jinja2Templates(directory=str(ROOT / "app" / "templates"))
 
@@ -124,16 +145,18 @@ def dashboard(request: HttpRequest, profile_id: str = "", show_all: str = "", so
         exposures = {p.id: db.exposures_for_profile(conn, p.id) for p in scope}
         networks = {p.id: found_networks(brokers, exposures[p.id]) for p in scope}
         requests = {p.id: db.ensure_requests(conn, p.id) for p in scope}
+        active = [b for b in brokers if not b.defunct]
         all_rows = [
             (b, p, requests[p.id][b.id],
              effective_exposure(b, exposures[p.id].get(b.id), networks[p.id]))
-            for b in brokers for p in scope
+            for b in active for p in scope
         ]
         rows = [row for row in all_rows if row_visible(row[3], row[2].status, bool(show_all))]
         counts = Counter(r.status for _, _, r, _ in rows)
         scope_ids = {p.id for p in scope}
         due = [r for r in db.due_requests(conn) if r.profile_id in scope_ids]
         due_brokers = [(db.get_broker(conn, r.broker_id), db.get_profile(conn, r.profile_id), r) for r in due]
+        due_brokers = [entry for entry in due_brokers if not entry[0].defunct]
         review = db.review_queue(conn)
         rows.sort(key=lambda x: (x[2].status != STATUS_NEEDS_VERIFICATION, x[0].name.lower(), x[1].name.lower()))
         rows = _sort_rows(rows, sort, dir, {
@@ -148,11 +171,12 @@ def dashboard(request: HttpRequest, profile_id: str = "", show_all: str = "", so
         return views.TemplateResponse("dashboard.html", {
             "request": request, "rows": rows, "counts": counts,
             "hidden": len(all_rows) - len(rows), "show_all": bool(show_all),
-            "total": len(brokers), "due_brokers": due_brokers,
+            "total": len(active), "due_brokers": due_brokers,
             "review_count": len(review), "profile_ready": all(p.full_name for p in profiles),
             "profiles": profiles, "selected_profile": selected, "multi_profile": len(profiles) > 1,
             "imap_enabled": cfg.get("imap", {}).get("enabled", False),
             "sort": sort, "dir": dir,
+            "show_drop": any(p.is_california() for p in scope),
         })
     finally:
         conn.close()
@@ -323,7 +347,7 @@ def scan_page(request: HttpRequest, profile_id: str = "", sort: str = "", dir: s
         rescan_after_days = fetcher.scan_settings()["rescan_after_days"]
         searchable = []
         for b in brokers:
-            if not b.search_url:
+            if not b.search_url or b.defunct:
                 continue
             exp = exposures.get(b.id)
             snapshot = json.loads(exp.snapshot) if exp and exp.snapshot else None
@@ -357,7 +381,7 @@ def scan_page(request: HttpRequest, profile_id: str = "", sort: str = "", dir: s
                 "source": exposures[b.id].source if b.id in exposures else "",
                 "likely_via": exposures[b.id].evidence if b.id in exposures and exposures[b.id].source == "network" else networks.get(b.network, ""),
             }
-            for b in brokers if not b.search_url
+            for b in brokers if not b.search_url and not b.defunct
         ]
         assumed = _sort_rows(assumed, asort, adir, {
             "broker": lambda r: r["broker"].name.casefold(),
@@ -366,7 +390,7 @@ def scan_page(request: HttpRequest, profile_id: str = "", sort: str = "", dir: s
         })
         drifting = [
             (b, streak, reason) for b, streak, reason in db.drifting_brokers(conn, DRIFT_STREAK_THRESHOLD)
-            if not scan_service.is_skipped(b)
+            if not scan_service.is_skipped(b) and not b.defunct
         ]
         return views.TemplateResponse("scan.html", {
             "request": request, "profile": profile, "profiles": profiles,

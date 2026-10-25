@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.[[README]]
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 Scrubbr is a local, subscription-free reimplementation of Incogni's data-broker
 removal workflow. It generates legal deletion/opt-out requests from your profile, tracks
@@ -34,7 +34,7 @@ framework. `app/main.py` holds every route; the rest of `app/` is a thin layered
   per tracked person), `requests` (unique on `(broker_id, profile_id)`, **auto-created lazily**
   by `get_or_create_request`), `request_history`, `exposures` (also unique on `(broker_id,
   profile_id)` — the scan pipeline's per-profile verdict), `seen_messages` (makes IMAP polling
-  idempotent). `set_status` is the only status mutator — it writes history and, on `sent`,
+  idempotent), `scan_cooldowns` (`ratelimit.py`'s persisted per-domain 429/503 cooldowns). `set_status` is the only status mutator — it writes history and, on `sent`,
   stamps `next_due` from the broker's category.
 - **`models.py`** — dataclasses + the status/contact-method/cadence constants. The status pipeline
   is `not_started → sent → confirmed | rejected | needs_verification`; `TERMINAL_STATUSES` and
@@ -54,7 +54,7 @@ framework. `app/main.py` holds every route; the rest of `app/` is a thin layered
   This is the designated insertion point for v2 Playwright form auto-send; keep routes calling
   through it.
 - **`send_service.py`** — orchestrates automatic sending: `eligible_broker_ids` (email/both,
-  `opt_out_email` set, request still `not_started`, exposure not `not_found`) and
+  not defunct, `opt_out_email` set, request still `not_started`, exposure not `not_found`) and
   `send_and_persist`, which only calls `db.set_status(..., STATUS_SENT)` after SMTP accepts the
   message — a failure leaves the request `not_started` so the next run retries it, and writes no
   history row. **`sender.build_message` never sets `Reply-To`**: the From address must be the same
@@ -90,6 +90,9 @@ framework. `app/main.py` holds every route; the rest of `app/` is a thin layered
   `/scan/{id}/mark` (picking `unknown` calls `db.clear_exposure`, deleting the row so the derived state
   returns), status posts to `/broker/{id}/status`. Both carry a `back` field so the badge redirects to the
   page it was clicked from — validate it through `_safe_redirect_target`, never trust it raw.
+  **`Broker.defunct`** (domain seized / dead) keeps the row and its history but excludes the
+  broker from `eligible_broker_ids`, `is_auto_scannable`, the dashboard meter/rows/due list, and
+  every `/scan` list; `/brokers` and `/broker/{id}` still show it, marked Defunct.
   **Drift monitor**: `exposures.fail_streak` bumps on consecutive `unreachable`; `db.drifting_brokers`
   surfaces a "needs attention" list (excluding `scan.skip` brokers).
   **Only brokers with a `search_url` in `data/brokers.json` are scan-eligible**, and only those without
@@ -109,8 +112,14 @@ framework. `app/main.py` holds every route; the rest of `app/` is a thin layered
   for `email`/`both` brokers whose effective exposure isn't `not_found`. Follow-up re-sends
   (`next_due`) and `form` brokers stay a manual click. Don't widen this scope without it being an
   explicit task.
+- **Host + Origin checks in `main.py`** (`TrustedHostMiddleware` + `reject_cross_origin`) are the
+  CSRF/DNS-rebinding defense. Never add `Referrer-Policy: no-referrer`: it makes Chromium send
+  `Origin: null` on same-origin form POSTs, which the check rejects. Tests need
+  `TestClient(..., base_url="http://127.0.0.1")`.
 - **`data/brokers.json` is the source of truth** for the broker registry — edit it and re-seed
-  rather than writing brokers directly to the DB. A broker's `jurisdiction` marks its regime
+  rather than writing brokers directly to the DB. `data/brokers.local.json` (gitignored, same
+  schema) holds personal additions. `seed_brokers.load_brokers` appends it and exits on any
+  normalized-name collision with the shared list. A broker's `jurisdiction` marks its regime
   (`US` vs `GDPR`/`UK-GDPR`) and `category` sets its follow-up cadence, so those fields are
   load-bearing, not cosmetic. For US brokers the exact state-law template comes from the user's
   `profile.state`, not the broker.
@@ -118,7 +127,10 @@ framework. `app/main.py` holds every route; the rest of `app/` is a thin layered
   inbound reply. Any change to how subjects are generated must stay in sync with the regex in
   `inbox.py`.
 - **Config falls back gracefully**: `config.py` loads `config.toml` if present, else
-  `config.example.toml`, so the app runs with IMAP disabled out of the box.
+  `config.example.toml`, so the app runs with IMAP and SMTP disabled out of the box.
+- **Mail TLS is always verified**: `inbox.poll` and `sender.open_smtp` pass
+  `ssl.create_default_context()` (the stdlib default without one is *unverified*). No insecure
+  fallback or config toggle.
 - Broker opt-out URLs/emails drift constantly and are unverified — treat them as needing
   confirmation, not as ground truth.
 - **A new broker's `search_url` may come from web research**, recorded with a `scan` stub of

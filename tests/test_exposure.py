@@ -191,6 +191,32 @@ def test_propagate_solo_network_is_noop(conn, profile_id):
     assert db.exposures_for_profile(conn, profile_id) == {}
 
 
+def test_defunct_column_migrates_onto_old_db(tmp_path):
+    conn = db.connect(tmp_path / "old.db")
+    conn.execute(
+        """CREATE TABLE brokers (
+               id INTEGER PRIMARY KEY AUTOINCREMENT,
+               name TEXT NOT NULL UNIQUE,
+               category TEXT NOT NULL,
+               website TEXT DEFAULT '', opt_out_url TEXT DEFAULT '',
+               opt_out_email TEXT DEFAULT '', contact_method TEXT DEFAULT 'email',
+               jurisdiction TEXT DEFAULT 'CCPA', difficulty INTEGER DEFAULT 1,
+               notes TEXT DEFAULT '', search_url TEXT DEFAULT '',
+               scan_config TEXT DEFAULT '', network TEXT DEFAULT '')"""
+    )
+    conn.execute("INSERT INTO brokers (name, category) VALUES ('Old', 'people-search')")
+    conn.commit()
+    db.init_db(conn)
+    cols = {r["name"] for r in conn.execute("PRAGMA table_info(brokers)")}
+    assert "defunct" in cols
+    assert not next(b for b in db.all_brokers(conn) if b.name == "Old").defunct
+
+    db.upsert_broker(conn, {"name": "Old", "category": "people-search", "defunct": True})
+    conn.commit()
+    assert next(b for b in db.all_brokers(conn) if b.name == "Old").defunct
+    conn.close()
+
+
 def test_network_column_migrates_and_round_trips(conn):
     db.upsert_broker(conn, {"name": "Intelius", "category": "people-search", "network": "peopleconnect"})
     conn.commit()
